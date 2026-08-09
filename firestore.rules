@@ -1,0 +1,91 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function guildDoc(guildId) {
+      return get(/databases/$(database)/documents/guilds/$(guildId));
+    }
+
+    function isOwner(guildId) {
+      return signedIn()
+        && guildDoc(guildId).data.ownerId == request.auth.uid;
+    }
+
+    function subDoc(guildId) {
+      return get(/databases/$(database)/documents/guilds/$(guildId)/subLeaders/$(request.auth.uid));
+    }
+
+    function isSubLeader(guildId) {
+      return signedIn()
+        && exists(/databases/$(database)/documents/guilds/$(guildId)/subLeaders/$(request.auth.uid));
+    }
+
+    function canEditGuild(guildId) {
+      return isOwner(guildId)
+        || (
+          isSubLeader(guildId)
+          && subDoc(guildId).data.canEditGuild == true
+        );
+    }
+
+    function canEditLine(guildId, lineId) {
+      return canEditGuild(guildId)
+        || (
+          isSubLeader(guildId)
+          && subDoc(guildId).data.allowedLineIds is list
+          && subDoc(guildId).data.allowedLineIds.hasAny([lineId])
+        );
+    }
+
+    match /users/{userId} {
+      allow read: if signedIn();
+      allow create, update: if signedIn() && request.auth.uid == userId;
+      allow delete: if false;
+    }
+
+    match /guilds/{guildId} {
+      allow read: if true;
+
+      allow create: if signedIn()
+        && request.resource.data.ownerId == request.auth.uid;
+
+      allow update: if canEditGuild(guildId)
+        && request.resource.data.ownerId == resource.data.ownerId
+        && request.resource.data.ownerEmail == resource.data.ownerEmail;
+
+      allow delete: if signedIn()
+        && resource.data.ownerId == request.auth.uid;
+
+      match /subLeaders/{subId} {
+        allow read: if signedIn()
+          && (
+            isOwner(guildId)
+            || resource.data.uid == request.auth.uid
+          );
+
+        allow create, update, delete: if isOwner(guildId);
+      }
+
+      match /lines/{lineId} {
+        allow read: if true;
+
+        allow create: if canEditGuild(guildId);
+
+        allow update: if canEditLine(guildId, lineId);
+
+        allow delete: if canEditGuild(guildId);
+
+        match /players/{playerId} {
+          allow read: if true;
+
+          allow create, update, delete: if canEditLine(guildId, lineId);
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <title>Guild Manager</title>
+
+  <link rel="stylesheet" href="style.css" />
+
+  <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body>
+  <div id="app"></div>
+
+  <div id="modal" class="modal">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h2 id="modalTitle">Modal</h2>
+
+        <button id="modalClose" class="icon-button" type="button">
+          <i data-lucide="x"></i>
+        </button>
+      </div>
+
+      <div id="modalBody"></div>
+    </div>
+  </div>
+
+  <div id="confirmModal" class="confirm-modal">
+    <div class="confirm-box">
+      <div id="confirmIcon" class="confirm-icon">
+        <i data-lucide="triangle-alert"></i>
+      </div>
+
+      <div class="confirm-content">
+        <h2 id="confirmTitle">Confirmar ação</h2>
+        <p id="confirmMessage">Tem certeza?</p>
+      </div>
+
+      <div class="confirm-actions">
+        <button id="confirmCancel" class="btn btn-secondary" type="button">Cancelar</button>
+        <button id="confirmOk" class="btn btn-danger" type="button">Confirmar</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="app.js?v=20"></script>
+</body>
+</html>
