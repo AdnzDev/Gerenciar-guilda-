@@ -1067,7 +1067,7 @@ td strong {
   }
 
   .main {
-    padding: 0 14px 92px;
+    padding: 0 14px calc(82px + env(safe-area-inset-bottom, 0px));
   }
 
   .mobile-top {
@@ -1143,13 +1143,14 @@ td strong {
 
   .bottom-nav {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
-    gap: 8px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
     position: fixed;
     left: 0;
     right: 0;
     bottom: 0;
-    padding: 10px;
+    min-height: 64px;
+    padding: 6px 10px calc(6px + env(safe-area-inset-bottom, 0px));
     background: rgba(8, 8, 14, .95);
     border-top: 1px solid var(--border);
     backdrop-filter: blur(14px);
@@ -1158,13 +1159,15 @@ td strong {
 
   .bottom-nav button {
     border: 0;
-    border-radius: 16px;
-    padding: 10px;
+    min-width: 0;
+    min-height: 52px;
+    border-radius: 14px;
+    padding: 6px 10px;
     background: transparent;
     color: var(--muted);
     display: grid;
     place-items: center;
-    gap: 4px;
+    gap: 2px;
     font-size: 12px;
     font-weight: 900;
   }
