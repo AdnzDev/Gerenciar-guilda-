@@ -17,20 +17,23 @@ import {
   setDoc,
   getDoc,
   getDocs,
+  onSnapshot,
   updateDoc,
   deleteDoc,
   query,
   where,
+  orderBy,
+  limit,
   serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
 
 const firebaseConfig = {
-  apiKey: "AIzaSyCdKpWilrfBv3pzss7_WzLCYBElCmnBcGw",
-  authDomain: "guild-manager-c760b.firebaseapp.com",
-  projectId: "guild-manager-c760b",
-  storageBucket: "guild-manager-c760b.firebasestorage.app",
-  messagingSenderId: "541323064261",
-  appId: "1:541323064261:web:8a4bcb948707724ceb11ac",
+  apiKey: "AIzaSyBFYC9pSo1dFpSyRGqxFIG-v8TQqRY8eFE",
+  authDomain: "guilda-eb4fb.firebaseapp.com",
+  projectId: "guilda-eb4fb",
+  storageBucket: "guilda-eb4fb.firebasestorage.app",
+  messagingSenderId: "172735809980",
+  appId: "1:172735809980:web:ffff94663f37aafaedc3b9"
 };
 
 const app = initializeApp(firebaseConfig);
@@ -66,8 +69,11 @@ const state = {
   selectedLine: null,
   publicMode: false,
   ranking: [],
+  actionLogs: [],
   playerSearch: "",
   modalSubmit: null,
+  modalSubmitBusy: false,
+  authSubmitBusy: false,
 };
 
 function icon(name, size = 18) {
@@ -99,9 +105,6 @@ function createGuildCode() {
   return Math.random().toString(36).slice(2, 12).toUpperCase();
 }
 
-function totalPlayer(player) {
-  return Number(player.honor || 0) + Number(player.war || 0);
-}
 
 function refreshIcons() {
   window.lucide?.createIcons();
@@ -143,6 +146,58 @@ function toast(message) {
   setTimeout(() => div.remove(), 2800);
 }
 
+
+function renderGuildCodeControl(code, label = "Código") {
+  const cleanCode = String(code || "").trim();
+
+  return `
+    <div class="guild-code-copy">
+      <span class="badge">${icon("key", 14)} ${label}: ${escapeHtml(cleanCode)}</span>
+
+      <button
+        class="copy-code-btn"
+        type="button"
+        data-action="copy-code"
+        data-code="${escapeHtml(cleanCode)}"
+        title="Copiar código da guilda"
+        aria-label="Copiar código da guilda"
+      >
+        ${icon("copy", 15)}
+      </button>
+    </div>
+  `;
+}
+
+async function copyGuildCode(code) {
+  const cleanCode = String(code || "").trim();
+
+  if (!cleanCode) {
+    toast("Código não encontrado.");
+    return;
+  }
+
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(cleanCode);
+    } else {
+      const textarea = document.createElement("textarea");
+      textarea.value = cleanCode;
+      textarea.setAttribute("readonly", "");
+      textarea.style.position = "fixed";
+      textarea.style.opacity = "0";
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand("copy");
+      textarea.remove();
+    }
+
+    toast(`Código copiado: ${cleanCode}`);
+  } catch (error) {
+    console.error(error);
+    toast("Não consegui copiar o código.");
+  }
+}
+
 function setLoading(value) {
   state.loading = value;
   render();
@@ -182,7 +237,282 @@ function confirmBox({
   });
 }
 
+function setFormBusy(form, busy) {
+  if (!form) return;
+
+  form.querySelectorAll("button, input, textarea").forEach((element) => {
+    if (element.dataset.keepEnabled === "true") return;
+    element.disabled = busy;
+  });
+
+  const submitButton = form.querySelector('button[type="submit"]');
+  if (submitButton) {
+    submitButton.classList.toggle("is-busy", busy);
+  }
+}
+
+async function refreshSelectedGuildSilently(options = {}) {
+  if (!state.selectedGuild?.id) return;
+
+  await loadGuildTree(state.selectedGuild.id, state.publicMode, {
+    silent: true,
+    preserveView: true,
+    ...options,
+  });
+}
+
+let realtimeGuildId = null;
+let realtimePublicMode = false;
+let realtimeReloadTimer = null;
+let realtimeReloadBusy = false;
+let turboSyncTimer = null;
+let turboSyncBusy = false;
+const TURBO_SYNC_MS = 700;
+let guildRealtimeUnsubs = [];
+let playerRealtimeUnsubs = new Map();
+
+function clearGuildRealtime() {
+  guildRealtimeUnsubs.forEach((unsubscribe) => unsubscribe());
+  guildRealtimeUnsubs = [];
+
+  playerRealtimeUnsubs.forEach((unsubscribe) => unsubscribe());
+  playerRealtimeUnsubs.clear();
+
+  if (realtimeReloadTimer) {
+    clearTimeout(realtimeReloadTimer);
+    realtimeReloadTimer = null;
+  }
+
+  if (turboSyncTimer) {
+    clearInterval(turboSyncTimer);
+    turboSyncTimer = null;
+  }
+
+  turboSyncBusy = false;
+  realtimeGuildId = null;
+}
+
+function scheduleRealtimeReload(delay = 60) {
+  if (!realtimeGuildId || realtimeReloadTimer || realtimeReloadBusy || document.hidden) return;
+
+  realtimeReloadTimer = setTimeout(async () => {
+    realtimeReloadTimer = null;
+
+    if (!realtimeGuildId || realtimeReloadBusy || document.hidden) return;
+
+    realtimeReloadBusy = true;
+
+    try {
+      await loadGuildTree(realtimeGuildId, realtimePublicMode, {
+        silent: true,
+        preserveView: true,
+      });
+    } catch (error) {
+      console.warn("Falha no tempo real:", error);
+    } finally {
+      realtimeReloadBusy = false;
+    }
+  }, delay);
+}
+
+function startTurboSync() {
+  if (!realtimeGuildId || turboSyncTimer) return;
+
+  turboSyncTimer = setInterval(async () => {
+    if (!realtimeGuildId || turboSyncBusy || document.hidden) return;
+    if (!state.selectedGuild?.id || state.selectedGuild.id !== realtimeGuildId) return;
+    if (state.view !== "guild" && state.view !== "line") return;
+
+    turboSyncBusy = true;
+
+    try {
+      await loadGuildTree(realtimeGuildId, realtimePublicMode, {
+        silent: true,
+        preserveView: true,
+      });
+    } catch (error) {
+      console.warn("Turbo sync falhou:", error);
+    } finally {
+      turboSyncBusy = false;
+    }
+  }, TURBO_SYNC_MS);
+}
+
+function syncPlayerRealtimeListeners() {
+  if (!realtimeGuildId) return;
+
+  const currentLineIds = new Set(state.selectedLines.map((line) => line.id));
+
+  for (const [lineId, unsubscribe] of playerRealtimeUnsubs.entries()) {
+    if (!currentLineIds.has(lineId)) {
+      unsubscribe();
+      playerRealtimeUnsubs.delete(lineId);
+    }
+  }
+
+  state.selectedLines.forEach((line) => {
+    if (playerRealtimeUnsubs.has(line.id)) return;
+
+    const playersRef = collection(db, "guilds", realtimeGuildId, "lines", line.id, "players");
+    const unsubscribe = onSnapshot(
+      playersRef,
+      () => scheduleRealtimeReload(),
+      (error) => console.warn("Listener de membros falhou:", error)
+    );
+
+    playerRealtimeUnsubs.set(line.id, unsubscribe);
+  });
+}
+
+function startGuildRealtime(guildId, publicMode = false) {
+  if (!guildId) return;
+
+  realtimePublicMode = publicMode;
+
+  if (realtimeGuildId === guildId) {
+    syncPlayerRealtimeListeners();
+    startTurboSync();
+    return;
+  }
+
+  clearGuildRealtime();
+  realtimeGuildId = guildId;
+  realtimePublicMode = publicMode;
+
+  guildRealtimeUnsubs.push(
+    onSnapshot(
+      doc(db, "guilds", guildId),
+      () => scheduleRealtimeReload(),
+      (error) => console.warn("Listener da guilda falhou:", error)
+    )
+  );
+
+  guildRealtimeUnsubs.push(
+    onSnapshot(
+      collection(db, "guilds", guildId, "lines"),
+      () => scheduleRealtimeReload(),
+      (error) => console.warn("Listener de lines falhou:", error)
+    )
+  );
+
+  syncPlayerRealtimeListeners();
+  startTurboSync();
+}
+
+
+function getActorRoleForLog(guildId) {
+  if (state.selectedGuild?.id === guildId) {
+    if (isOwner()) return "Dono";
+    if (state.mySubLeader?.canEditGuild) return "Sublíder geral";
+    if (state.mySubLeader) return "Sublíder de line";
+  }
+
+  return "Usuário";
+}
+
+async function createActionLog(guildId, data = {}) {
+  if (!state.user || !guildId) return;
+
+  try {
+    await addDoc(collection(db, "guilds", guildId, "logs"), {
+      action: data.action || "action",
+      title: data.title || "Ação registrada",
+      description: data.description || "",
+      targetType: data.targetType || "guild",
+      targetId: data.targetId || "",
+      targetName: data.targetName || "",
+      actorUid: state.user.uid,
+      actorEmail: state.user.email,
+      actorRole: getActorRoleForLog(guildId),
+      createdAt: serverTimestamp(),
+    });
+  } catch (error) {
+    console.warn("Não foi possível registrar log:", error);
+  }
+}
+
+async function loadActionLogs(guildId = state.selectedGuild?.id) {
+  if (!guildId) return [];
+
+  try {
+    const q = query(
+      collection(db, "guilds", guildId, "logs"),
+      orderBy("createdAt", "desc"),
+      limit(50)
+    );
+
+    const snap = await getDocs(q);
+
+    state.actionLogs = snap.docs.map((item) => ({
+      id: item.id,
+      ...item.data(),
+    }));
+
+    return state.actionLogs;
+  } catch (error) {
+    console.error("Erro ao carregar histórico:", error);
+    toast("Erro ao carregar histórico. Confira as Rules do Firebase.");
+    return [];
+  }
+}
+
+function formatLogDate(log) {
+  const date = log.createdAt?.toDate?.();
+
+  if (!date) return "Agora";
+
+  return date.toLocaleString("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function renderActionLogs(logs) {
+  if (!logs.length) {
+    return `<div class="empty">Nenhuma ação registrada ainda.</div>`;
+  }
+
+  return `
+    <div class="log-list">
+      ${logs.map(log => `
+        <div class="log-item">
+          <div class="log-icon">${icon(log.action?.includes("delete") ? "trash-2" : log.action?.includes("create") ? "plus" : "history", 18)}</div>
+
+          <div class="log-content">
+            <strong>${escapeHtml(log.title || "Ação registrada")}</strong>
+            <p>${escapeHtml(log.description || "")}</p>
+            <small>
+              ${escapeHtml(log.actorEmail || "Usuário")} • ${escapeHtml(log.actorRole || "")} • ${formatLogDate(log)}
+            </small>
+          </div>
+        </div>
+      `).join("")}
+    </div>
+  `;
+}
+
+function photoBlockReason(item) {
+  return item?.photoBlockReason || "Foto bloqueada por moderação.";
+}
+
+function renderPhotoBlockBadge(item) {
+  if (item?.photoBlocked !== true) return "";
+
+  return `<span class="badge yellow">${icon("image-off", 14)} Foto bloqueada</span>`;
+}
+
 function renderAvatar(item, size = "md", fallbackIcon = "shield", alt = "Imagem") {
+  if (item?.photoBlocked === true) {
+    return `
+      <div class="avatar ${size} blocked" title="${escapeHtml(photoBlockReason(item))}">
+        ${icon("image-off", size === "lg" ? 32 : 20)}
+      </div>
+    `;
+  }
+
   if (item?.logoData) {
     return `
       <div class="avatar ${size}">
@@ -328,9 +658,15 @@ modal.addEventListener("click", (event) => {
 });
 
 function route(view) {
+  if (view !== "guild" && view !== "line") {
+    clearGuildRealtime();
+  }
+
   state.view = view;
 
   if (view === "home") {
+    clearGuildRealtime();
+    clearGuildRealtime();
     state.selectedGuild = null;
     state.selectedLines = [];
     state.selectedPlayers = [];
@@ -436,15 +772,21 @@ async function loadSubLeaderData(guild) {
   }
 }
 
-async function loadGuildTree(guildId, publicMode = false) {
-  setLoading(true);
+async function loadGuildTree(guildId, publicMode = false, options = {}) {
+  const silent = options.silent === true;
+  const preserveView = options.preserveView === true;
+  const previousView = state.view;
+  const previousLineId = state.selectedLine?.id || null;
+  const previousSearch = state.playerSearch;
+
+  if (!silent) setLoading(true);
 
   try {
     const guildRef = doc(db, "guilds", guildId);
     const guildSnap = await getDoc(guildRef);
 
     if (!guildSnap.exists()) {
-      toast("Guilda não encontrada.");
+      if (!silent) toast("Guilda não encontrada.");
       return;
     }
 
@@ -479,17 +821,42 @@ async function loadGuildTree(guildId, publicMode = false) {
 
     state.selectedGuild = guild;
     state.selectedLines = lines;
-    state.selectedLine = null;
-    state.selectedPlayers = [];
     state.publicMode = publicMode;
-    state.view = "guild";
-    state.playerSearch = "";
+
+    if (preserveView && previousView === "line" && previousLineId) {
+      const updatedLine = lines.find((line) => line.id === previousLineId);
+
+      if (updatedLine) {
+        state.selectedLine = updatedLine;
+        state.selectedPlayers = updatedLine.players || [];
+        state.view = "line";
+        state.playerSearch = previousSearch;
+      } else {
+        state.selectedLine = null;
+        state.selectedPlayers = [];
+        state.view = "guild";
+        state.playerSearch = "";
+      }
+    } else {
+      state.selectedLine = null;
+      state.selectedPlayers = [];
+      state.view = "guild";
+      if (!silent) state.playerSearch = "";
+    }
+
+    startGuildRealtime(guild.id, publicMode);
+    syncPlayerRealtimeListeners();
   } catch (error) {
     console.error(error);
-    toast("Erro ao carregar guilda. Confira as Rules do Firebase.");
+    if (!silent) toast("Erro ao carregar guilda. Confira as Rules do Firebase.");
   } finally {
+    const scrollY = window.scrollY;
     state.loading = false;
     render();
+
+    if (silent) {
+      requestAnimationFrame(() => window.scrollTo(0, scrollY));
+    }
   }
 }
 
@@ -540,55 +907,8 @@ async function loadLine(lineId) {
 }
 
 async function loadGlobalRanking() {
-  setLoading(true);
-
-  try {
-    const ranking = [];
-    const guildSnap = await getDocs(collection(db, "guilds"));
-
-    for (const guildDoc of guildSnap.docs) {
-      const guild = {
-        id: guildDoc.id,
-        ...guildDoc.data(),
-      };
-
-      const linesSnap = await getDocs(collection(db, "guilds", guild.id, "lines"));
-
-      for (const lineDoc of linesSnap.docs) {
-        const line = {
-          id: lineDoc.id,
-          ...lineDoc.data(),
-        };
-
-        const playersSnap = await getDocs(
-          collection(db, "guilds", guild.id, "lines", line.id, "players")
-        );
-
-        playersSnap.docs.forEach((playerDoc) => {
-          const player = {
-            id: playerDoc.id,
-            ...playerDoc.data(),
-          };
-
-          ranking.push({
-            ...player,
-            guildName: guild.name,
-            lineName: line.name,
-            total: totalPlayer(player),
-          });
-        });
-      }
-    }
-
-    state.ranking = ranking.sort((a, b) => b.total - a.total);
-    state.view = "ranking";
-  } catch (error) {
-    console.error(error);
-    toast("Erro ao carregar ranking.");
-  } finally {
-    state.loading = false;
-    render();
-  }
+  // Ranking global removido. O ranking agora aparece dentro de cada guilda.
+  route("home");
 }
 
 async function register(email, password) {
@@ -669,6 +989,7 @@ async function login(email, password) {
 }
 
 async function logout() {
+  clearGuildRealtime();
   await signOut(auth);
 
   state.view = "home";
@@ -710,18 +1031,16 @@ async function createGuild(data) {
   }
 
   if (!code) {
-    toast("Informe a tag da guilda.");
+    toast("Informe o código da guilda.");
     return false;
   }
 
   const existing = await getDocs(query(collection(db, "guilds"), where("code", "==", code)));
 
   if (!existing.empty) {
-    toast("Essa tag já está em uso.");
+    toast("Esse código já está em uso.");
     return false;
   }
-
-  setLoading(true);
 
   try {
     const ref = await addDoc(collection(db, "guilds"), {
@@ -729,6 +1048,8 @@ async function createGuild(data) {
       code,
       description,
       logoData,
+      photoBlocked: false,
+      photoBlockReason: "",
       alerta: "",
       ownerId: state.user.uid,
       ownerEmail: state.user.email,
@@ -736,9 +1057,18 @@ async function createGuild(data) {
       updatedAt: serverTimestamp(),
     });
 
+    await createActionLog(ref.id, {
+      action: "create_guild",
+      title: "Guilda criada",
+      description: `Criou a guilda ${name}.`,
+      targetType: "guild",
+      targetId: ref.id,
+      targetName: name,
+    });
+
     await loadOwnerGuilds();
     await loadSubGuilds();
-    await loadGuildTree(ref.id, false);
+    await loadGuildTree(ref.id, false, { silent: true, preserveView: true });
 
     toast("Guilda criada.");
     return true;
@@ -763,9 +1093,11 @@ async function updateGuild(data) {
   const description = data.description?.trim() || "";
   const logoData = data.logoData ?? state.selectedGuild.logoData ?? "";
   const alerta = state.selectedGuild.alerta || "";
+  const photoBlocked = state.selectedGuild.photoBlocked === true;
+  const photoBlockReason = state.selectedGuild.photoBlockReason || "";
 
   if (!name || !code) {
-    toast("Nome e tag são obrigatórios.");
+    toast("Nome e código são obrigatórios.");
     return false;
   }
 
@@ -773,7 +1105,7 @@ async function updateGuild(data) {
   const codeUsedByOther = existing.docs.some((item) => item.id !== state.selectedGuild.id);
 
   if (codeUsedByOther) {
-    toast("Essa tag já está sendo usada.");
+    toast("Esse código já está sendo usado.");
     return false;
   }
 
@@ -782,15 +1114,26 @@ async function updateGuild(data) {
     code,
     description,
     logoData,
+    photoBlocked,
+    photoBlockReason,
     alerta,
     ownerId: state.selectedGuild.ownerId,
     ownerEmail: state.selectedGuild.ownerEmail,
     updatedAt: serverTimestamp(),
   });
 
+  await createActionLog(state.selectedGuild.id, {
+    action: "update_guild",
+    title: "Guilda editada",
+    description: `Editou os dados da guilda ${name}.`,
+    targetType: "guild",
+    targetId: state.selectedGuild.id,
+    targetName: name,
+  });
+
   await loadOwnerGuilds();
   await loadSubGuilds();
-  await loadGuildTree(state.selectedGuild.id, false);
+  await refreshSelectedGuildSilently();
 
   toast("Guilda atualizada.");
   return true;
@@ -817,9 +1160,16 @@ async function deleteGuild(guildId) {
 
   if (!confirmed) return;
 
-  setLoading(true);
-
   try {
+    await createActionLog(guildId, {
+      action: "delete_guild",
+      title: "Guilda apagada",
+      description: `Apagou a guilda ${guild.name || guildId}.`,
+      targetType: "guild",
+      targetId: guildId,
+      targetName: guild.name || guildId,
+    });
+
     const subSnap = await getDocs(collection(db, "guilds", guildId, "subLeaders"));
 
     for (const subDoc of subSnap.docs) {
@@ -845,6 +1195,7 @@ async function deleteGuild(guildId) {
     await loadOwnerGuilds();
     await loadSubGuilds();
 
+    clearGuildRealtime();
     state.selectedGuild = null;
     state.selectedLines = [];
     state.selectedLine = null;
@@ -874,15 +1225,26 @@ async function createLine(data) {
     return false;
   }
 
-  await addDoc(collection(db, "guilds", state.selectedGuild.id, "lines"), {
+  const ref = await addDoc(collection(db, "guilds", state.selectedGuild.id, "lines"), {
     name,
     description,
     logoData,
+    photoBlocked: false,
+    photoBlockReason: "",
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   });
 
-  await loadGuildTree(state.selectedGuild.id, false);
+  await createActionLog(state.selectedGuild.id, {
+    action: "create_line",
+    title: "Line criada",
+    description: `Criou a line ${name}.`,
+    targetType: "line",
+    targetId: ref.id,
+    targetName: name,
+  });
+
+  await refreshSelectedGuildSilently();
 
   toast("Line criada.");
   return true;
@@ -898,6 +1260,8 @@ async function updateLine(lineId, data) {
   const description = data.description.trim();
   const currentLine = state.selectedLines.find((item) => item.id === lineId);
   const logoData = data.logoData ?? currentLine?.logoData ?? "";
+  const photoBlocked = currentLine?.photoBlocked === true;
+  const photoBlockReason = currentLine?.photoBlockReason || "";
 
   if (!name) {
     toast("Informe o nome da line.");
@@ -908,10 +1272,21 @@ async function updateLine(lineId, data) {
     name,
     description,
     logoData,
+    photoBlocked,
+    photoBlockReason,
     updatedAt: serverTimestamp(),
   });
 
-  await loadGuildTree(state.selectedGuild.id, false);
+  await createActionLog(state.selectedGuild.id, {
+    action: "update_line",
+    title: "Line editada",
+    description: `Editou a line ${name}.`,
+    targetType: "line",
+    targetId: lineId,
+    targetName: name,
+  });
+
+  await refreshSelectedGuildSilently();
 
   toast("Line atualizada.");
   return true;
@@ -934,6 +1309,16 @@ async function deleteLine(lineId) {
 
   if (!confirmed) return;
 
+  const currentLine = state.selectedLines.find((item) => item.id === lineId);
+  await createActionLog(state.selectedGuild.id, {
+    action: "delete_line",
+    title: "Line apagada",
+    description: `Apagou a line ${currentLine?.name || lineId}.`,
+    targetType: "line",
+    targetId: lineId,
+    targetName: currentLine?.name || lineId,
+  });
+
   const playersSnap = await getDocs(
     collection(db, "guilds", state.selectedGuild.id, "lines", lineId, "players")
   );
@@ -946,7 +1331,7 @@ async function deleteLine(lineId) {
 
   await deleteDoc(doc(db, "guilds", state.selectedGuild.id, "lines", lineId));
 
-  await loadGuildTree(state.selectedGuild.id, false);
+  await refreshSelectedGuildSilently();
 
   toast("Line apagada.");
 }
@@ -978,16 +1363,27 @@ async function createPlayer(data) {
     return false;
   }
 
-  await addDoc(
+  const ref = await addDoc(
     collection(db, "guilds", state.selectedGuild.id, "lines", line.id, "players"),
     {
       ...payload,
+      photoBlocked: false,
+      photoBlockReason: "",
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     }
   );
 
-  await loadGuildTree(state.selectedGuild.id, false);
+  await createActionLog(state.selectedGuild.id, {
+    action: "create_player",
+    title: "Membro adicionado",
+    description: `Adicionou ${payload.nick} na line ${line.name}.`,
+    targetType: "player",
+    targetId: ref.id,
+    targetName: payload.nick,
+  });
+
+  await refreshSelectedGuildSilently();
   await loadLine(line.id);
 
   toast("Jogador adicionado.");
@@ -1017,11 +1413,22 @@ async function updatePlayer(playerId, data) {
     doc(db, "guilds", state.selectedGuild.id, "lines", line.id, "players", playerId),
     {
       ...payload,
+      photoBlocked: currentPlayer?.photoBlocked === true,
+      photoBlockReason: currentPlayer?.photoBlockReason || "",
       updatedAt: serverTimestamp(),
     }
   );
 
-  await loadGuildTree(state.selectedGuild.id, false);
+  await createActionLog(state.selectedGuild.id, {
+    action: "update_player",
+    title: "Membro editado",
+    description: `Editou ${payload.nick} na line ${line.name}.`,
+    targetType: "player",
+    targetId: playerId,
+    targetName: payload.nick,
+  });
+
+  await refreshSelectedGuildSilently();
   await loadLine(line.id);
 
   toast("Jogador atualizado.");
@@ -1047,11 +1454,21 @@ async function deletePlayer(playerId) {
 
   if (!confirmed) return;
 
+  const currentPlayer = (line.players || []).find((item) => item.id === playerId);
+  await createActionLog(state.selectedGuild.id, {
+    action: "delete_player",
+    title: "Membro apagado",
+    description: `Removeu ${currentPlayer?.nick || playerId} da line ${line.name}.`,
+    targetType: "player",
+    targetId: playerId,
+    targetName: currentPlayer?.nick || playerId,
+  });
+
   await deleteDoc(
     doc(db, "guilds", state.selectedGuild.id, "lines", line.id, "players", playerId)
   );
 
-  await loadGuildTree(state.selectedGuild.id, false);
+  await refreshSelectedGuildSilently();
   await loadLine(line.id);
 
   toast("Jogador apagado.");
@@ -1118,7 +1535,16 @@ async function addSubLeader(data) {
     updatedAt: serverTimestamp(),
   });
 
-  await loadGuildTree(state.selectedGuild.id, false);
+  await createActionLog(state.selectedGuild.id, {
+    action: "create_subleader",
+    title: "Sublíder autorizado",
+    description: `Autorizou ${user.email} como sublíder.`,
+    targetType: "subleader",
+    targetId: user.uid,
+    targetName: user.email,
+  });
+
+  await refreshSelectedGuildSilently();
   await loadSubGuilds();
 
   toast("Sublíder salvo.");
@@ -1152,7 +1578,16 @@ async function updateSubLeader(subUid, data) {
     updatedAt: serverTimestamp(),
   });
 
-  await loadGuildTree(state.selectedGuild.id, false);
+  await createActionLog(state.selectedGuild.id, {
+    action: "update_subleader",
+    title: "Permissão de sublíder alterada",
+    description: `Alterou permissões de ${current.email}.`,
+    targetType: "subleader",
+    targetId: subUid,
+    targetName: current.email,
+  });
+
+  await refreshSelectedGuildSilently();
   await loadSubGuilds();
 
   toast("Permissões atualizadas.");
@@ -1176,9 +1611,20 @@ async function removeSubLeader(subUid) {
 
   if (!confirmed) return;
 
+  const current = state.subLeaders.find((item) => item.uid === subUid || item.id === subUid);
+
+  await createActionLog(state.selectedGuild.id, {
+    action: "delete_subleader",
+    title: "Sublíder removido",
+    description: `Removeu ${current?.email || subUid} dos sublíderes.`,
+    targetType: "subleader",
+    targetId: subUid,
+    targetName: current?.email || subUid,
+  });
+
   await deleteDoc(doc(db, "guilds", state.selectedGuild.id, "subLeaders", subUid));
 
-  await loadGuildTree(state.selectedGuild.id, false);
+  await refreshSelectedGuildSilently();
   await loadSubGuilds();
 
   closeModal();
@@ -1274,10 +1720,6 @@ function renderSidebar() {
           Painel Admin
         </button>
 
-        <button class="nav-btn ${state.view === "ranking" ? "active" : ""}" data-action="ranking">
-          ${icon("trophy")}
-          Ranking Global
-        </button>
       </nav>
 
       <div class="side-section">
@@ -1376,10 +1818,6 @@ function renderBottomNav() {
         Admin
       </button>
 
-      <button class="${state.view === "ranking" ? "active" : ""}" data-action="ranking">
-        ${icon("trophy")}
-        Ranking
-      </button>
     </nav>
   `;
 }
@@ -1399,7 +1837,6 @@ function renderView() {
   if (state.view === "admin") return renderAdmin();
   if (state.view === "guild") return renderGuild();
   if (state.view === "line") return renderLine();
-  if (state.view === "ranking") return renderRanking();
 
   return renderHome();
 }
@@ -1407,7 +1844,15 @@ function renderView() {
 function renderHome() {
   return `
     <section class="hero">
-      <div class="hero-icon">${icon("sparkles", 34)}</div>
+      <div class="ff-hero-emblem">
+        <span class="ff-emblem-glow"></span>
+        <span class="ff-emblem-main">
+          ${icon("flame", 34)}
+        </span>
+        <span class="ff-emblem-target">
+          ${icon("crosshair", 18)}
+        </span>
+      </div>
       <h1>Guild Manager</h1>
       <p>
         Gerencie guildas, lines e jogadores com acesso público por código
@@ -1537,7 +1982,7 @@ function renderAdmin() {
     <div class="header-card">
       <span class="badge">${icon("layout-dashboard", 15)} Painel Admin</span>
       <h1>Minhas Guildas</h1>
-      <p>Crie até 5 guildas. Cada guilda recebe uma tag pública para visualização.</p>
+      <p>Crie até 5 guildas. Cada guilda recebe um código público para visualização.</p>
 
       <div class="header-actions">
         <button class="btn btn-primary" data-action="open-create-guild" ${state.ownerGuilds.length >= 5 ? "disabled" : ""}>
@@ -1576,7 +2021,7 @@ function renderAdmin() {
                 </div>
 
                 <p>${escapeHtml(guild.description || "Sem descrição.")}</p>
-                <span class="badge">${icon("key", 14)} ${escapeHtml(guild.code)}</span>
+                ${renderGuildCodeControl(guild.code)}
 
                 <div class="actions">
                   <button class="btn btn-primary" data-action="open-owner-guild" data-id="${guild.id}">
@@ -1658,6 +2103,73 @@ function renderPermissionBadgeForLine(line) {
   return "";
 }
 
+function getGuildPlayers() {
+  return (state.selectedLines || []).flatMap((line) => {
+    return (line.players || []).map((player) => ({
+      ...player,
+      lineName: line.name || "Line",
+      lineId: line.id,
+    }));
+  });
+}
+
+function renderRankingList(players, field, label, emptyText) {
+  const sorted = [...players]
+    .sort((a, b) => Number(b[field] || 0) - Number(a[field] || 0))
+    .slice(0, 20);
+
+  if (sorted.length === 0) {
+    return `<div class="empty">${emptyText}</div>`;
+  }
+
+  return `
+    <div class="ranking-list">
+      ${sorted.map((player, index) => `
+        <div class="ranking-row">
+          <strong class="ranking-position">#${index + 1}</strong>
+
+          <div class="member-cell">
+            ${renderAvatar(player, "xs", "user", "Foto do membro")}
+            <div>
+              <strong>${escapeHtml(player.nick || "Sem nick")}</strong>
+              <small>${escapeHtml(player.name || "Sem nome")} • ${escapeHtml(player.lineName || "Line")}</small>
+            </div>
+          </div>
+
+          <strong class="ranking-score">${Number(player[field] || 0)}</strong>
+        </div>
+      `).join("")}
+    </div>
+  `;
+}
+
+function renderGuildRankings() {
+  const players = getGuildPlayers();
+
+  return `
+    <div class="guild-ranking-section">
+      <div class="card-header">
+        <div>
+          <h2>Ranking da Guilda</h2>
+          <p>Ranking individual desta guilda. Honra e Guerra ficam separados.</p>
+        </div>
+      </div>
+
+      <div class="ranking-grid">
+        <div class="ranking-card">
+          <span class="badge green">${icon("medal", 14)} Ranking por Honra</span>
+          ${renderRankingList(players, "honor", "Honra", "Nenhum membro com honra cadastrado.")}
+        </div>
+
+        <div class="ranking-card">
+          <span class="badge yellow">${icon("swords", 14)} Ranking por Guerra</span>
+          ${renderRankingList(players, "war", "Guerra", "Nenhum membro com guerra cadastrado.")}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
 function renderGuild() {
   const guild = state.selectedGuild;
 
@@ -1670,8 +2182,11 @@ function renderGuild() {
   const sub = isSubLeader();
 
   const membersCount = state.selectedLines.reduce((total, line) => total + (line.players || []).length, 0);
-  const totalScore = state.selectedLines.reduce((total, line) => {
-    return total + (line.players || []).reduce((sum, player) => sum + totalPlayer(player), 0);
+  const totalHonor = state.selectedLines.reduce((total, line) => {
+    return total + (line.players || []).reduce((sum, player) => sum + Number(player.honor || 0), 0);
+  }, 0);
+  const totalWar = state.selectedLines.reduce((total, line) => {
+    return total + (line.players || []).reduce((sum, player) => sum + Number(player.war || 0), 0);
   }, 0);
 
   return `
@@ -1682,11 +2197,12 @@ function renderGuild() {
       </button>
 
       <div style="margin-top:18px">
-        <span class="badge">${icon("key", 14)} Tag: ${escapeHtml(guild.code)}</span>
+        ${renderGuildCodeControl(guild.code)}
         ${owner ? `<span class="badge green">${icon("crown", 14)} Você é o criador</span>` : ""}
         ${sub && state.mySubLeader?.canEditGuild ? `<span class="badge yellow">${icon("user-check", 14)} Sublíder geral</span>` : ""}
         ${sub && !state.mySubLeader?.canEditGuild ? `<span class="badge yellow">${icon("user-check", 14)} Sublíder de line</span>` : ""}
         ${!owner && !sub ? `<span class="badge">${icon("eye", 14)} Visualização pública</span>` : ""}
+        ${renderPhotoBlockBadge(guild)}
 
         <div class="title-row">
           ${renderAvatar(guild, "lg", "shield", "Logo da guilda")}
@@ -1707,6 +2223,15 @@ function renderGuild() {
               <button class="btn btn-secondary" data-action="open-edit-guild">
                 ${icon("edit-2")}
                 Editar Guilda
+              </button>`
+            : ""
+        }
+
+        ${
+          owner || sub
+            ? `<button class="btn btn-secondary" data-action="open-logs">
+                ${icon("history")}
+                Histórico
               </button>`
             : ""
         }
@@ -1746,10 +2271,17 @@ function renderGuild() {
       </div>
 
       <div class="stat">
-        <span>Pontuação</span>
-        <strong>${totalScore}</strong>
+        <span>Total Honra</span>
+        <strong>${totalHonor}</strong>
+      </div>
+
+      <div class="stat">
+        <span>Total Guerra</span>
+        <strong>${totalWar}</strong>
       </div>
     </div>
+
+    ${renderGuildRankings()}
 
     ${
       state.selectedLines.length === 0
@@ -1770,6 +2302,7 @@ function renderGuild() {
                   <div class="actions">
                     <span class="badge">${icon("users", 14)} ${(line.players || []).length} membro(s)</span>
                     ${renderPermissionBadgeForLine(line)}
+                    ${renderPhotoBlockBadge(line)}
                   </div>
 
                   <div class="actions">
@@ -1831,6 +2364,7 @@ function renderLine() {
       <div style="margin-top:18px">
         <span class="badge">${icon("shield", 14)} ${escapeHtml(guild.name)}</span>
         ${lineEditor ? `<span class="badge green">${icon("lock-open", 14)} Edição liberada</span>` : ""}
+        ${renderPhotoBlockBadge(line)}
 
         <div class="title-row">
           ${renderAvatar(line, "lg", "users", "Foto da line")}
@@ -1880,7 +2414,6 @@ function renderLine() {
                   <th>Função</th>
                   <th>Honra</th>
                   <th>Guerra</th>
-                  <th>Total</th>
                   <th>Notas</th>
                   ${lineEditor ? "<th>Ações</th>" : ""}
                 </tr>
@@ -1900,7 +2433,6 @@ function renderLine() {
                     <td>${escapeHtml(player.role || "-")}</td>
                     <td>${Number(player.honor || 0)}</td>
                     <td>${Number(player.war || 0)}</td>
-                    <td class="score">${totalPlayer(player)}</td>
                     <td>${escapeHtml(player.notes || "-")}</td>
                     ${
                       lineEditor
@@ -1935,7 +2467,6 @@ function renderLine() {
                     </div>
                   </div>
 
-                  <strong class="score" style="font-size:24px">${totalPlayer(player)}</strong>
                 </div>
 
                 <div class="stats" style="margin:16px 0 0">
@@ -1990,96 +2521,40 @@ function renderLine() {
 }
 
 function renderRanking() {
-  return `
-    <div class="header-card">
-      <button class="btn btn-ghost" data-action="home">
-        ${icon("arrow-left")}
-        Voltar
-      </button>
+  return renderHome();
+}
 
-      <div style="margin-top:18px">
-        <span class="badge">${icon("trophy", 14)} Ranking Global</span>
-        <h1>Ranking</h1>
-        <p>Classificação geral por Honra + Guerra.</p>
+async function openActionLogsModal() {
+  if (!state.selectedGuild) return;
+
+  showModal(
+    "Histórico de ações",
+    `
+      <div class="form">
+        <div class="empty">Carregando histórico...</div>
+      </div>
+    `
+  );
+
+  const logs = await loadActionLogs(state.selectedGuild.id);
+
+  modalTitle.textContent = "Histórico de ações";
+  modalBody.innerHTML = `
+    <div class="form">
+      <div class="help-box">
+        <strong>Histórico da guilda</strong>
+        <p>Mostra quem criou, editou ou apagou itens nesta guilda. Atualiza quando ações novas forem feitas.</p>
+      </div>
+
+      ${renderActionLogs(logs)}
+
+      <div class="form-actions">
+        <button class="btn btn-secondary" type="button" data-action="close-modal">Fechar</button>
       </div>
     </div>
-
-    ${
-      state.ranking.length === 0
-        ? `<div class="empty">Nenhum jogador encontrado no ranking.</div>`
-        : `
-          <div class="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>#</th>
-                  <th>Nick</th>
-                  <th>Nome</th>
-                  <th>Guilda</th>
-                  <th>Line</th>
-                  <th>Honra</th>
-                  <th>Guerra</th>
-                  <th>Total</th>
-                </tr>
-              </thead>
-
-              <tbody>
-                ${state.ranking.map((player, index) => `
-                  <tr>
-                    <td><strong>#${index + 1}</strong></td>
-                    <td>
-                      <div class="member-cell">
-                        ${renderAvatar(player, "xs", "user", "Foto do membro")}
-                        <strong>${escapeHtml(player.nick)}</strong>
-                      </div>
-                    </td>
-                    <td>${escapeHtml(player.name)}</td>
-                    <td>${escapeHtml(player.guildName)}</td>
-                    <td>${escapeHtml(player.lineName)}</td>
-                    <td>${Number(player.honor || 0)}</td>
-                    <td>${Number(player.war || 0)}</td>
-                    <td class="score">${player.total}</td>
-                  </tr>
-                `).join("")}
-              </tbody>
-            </table>
-          </div>
-
-          <div class="player-mobile-list">
-            ${state.ranking.map((player, index) => `
-              <div class="player-card">
-                <span class="badge">${icon("trophy", 14)} #${index + 1}</span>
-
-                <div class="card-title-row" style="margin-top:12px">
-                  ${renderAvatar(player, "md", "user", "Foto do membro")}
-                  <div>
-                    <h3>${escapeHtml(player.nick)}</h3>
-                    <p>${escapeHtml(player.name)}</p>
-                  </div>
-                </div>
-
-                <div class="stats" style="margin-top:16px">
-                  <div class="stat">
-                    <span>Guilda</span>
-                    <strong style="font-size:17px">${escapeHtml(player.guildName)}</strong>
-                  </div>
-
-                  <div class="stat">
-                    <span>Line</span>
-                    <strong style="font-size:17px">${escapeHtml(player.lineName)}</strong>
-                  </div>
-
-                  <div class="stat">
-                    <span>Total</span>
-                    <strong>${player.total}</strong>
-                  </div>
-                </div>
-              </div>
-            `).join("")}
-          </div>
-        `
-    }
   `;
+
+  refreshIcons();
 }
 
 function openSubHelpModal() {
@@ -2118,7 +2593,7 @@ function openCreateGuildModal() {
         </label>
 
         <label>
-          Tag
+          Código
           <input id="guildCode" placeholder="Ex: 1234567890" value="${createGuildCode()}" />
         </label>
 
@@ -2159,7 +2634,7 @@ function openEditGuildModal() {
         </label>
 
         <label>
-          Tag
+          Código
           <input id="guildCode" value="${escapeHtml(guild.code)}" />
         </label>
 
@@ -2498,6 +2973,13 @@ document.addEventListener("click", async (event) => {
   const action = button.dataset.action;
   const id = button.dataset.id;
 
+  if (action === "copy-code") {
+    event.preventDefault();
+    event.stopPropagation();
+    await copyGuildCode(button.dataset.code);
+    return;
+  }
+
   if (action === "home") route("home");
 
   if (action === "admin") {
@@ -2512,9 +2994,6 @@ document.addEventListener("click", async (event) => {
     route("admin");
   }
 
-  if (action === "ranking") {
-    await loadGlobalRanking();
-  }
 
   if (action === "show-login") {
     state.homeTab = "login";
@@ -2561,6 +3040,8 @@ document.addEventListener("click", async (event) => {
 
   if (action === "open-sub-help") openSubHelpModal();
 
+  if (action === "open-logs") await openActionLogsModal();
+
   if (action === "open-subleaders") openSubLeadersModal();
 
   if (action === "edit-subleader") openEditSubLeaderModal(id);
@@ -2599,19 +3080,45 @@ document.addEventListener("submit", async (event) => {
   if (event.target.id === "authForm") {
     event.preventDefault();
 
-    const email = document.querySelector("#authEmail").value.trim();
-    const password = document.querySelector("#authPassword").value.trim();
+    if (state.authSubmitBusy) return;
 
-    if (state.authMode === "login") {
-      await login(email, password);
-    } else {
-      await register(email, password);
+    state.authSubmitBusy = true;
+    setFormBusy(event.target, true);
+
+    try {
+      const email = document.querySelector("#authEmail").value.trim();
+      const password = document.querySelector("#authPassword").value.trim();
+
+      if (state.authMode === "login") {
+        await login(email, password);
+      } else {
+        await register(email, password);
+      }
+    } finally {
+      state.authSubmitBusy = false;
+      setFormBusy(event.target, false);
+      refreshIcons();
     }
   }
 
   if (event.target.id === "modalForm") {
     event.preventDefault();
-    await state.modalSubmit?.();
+
+    if (state.modalSubmitBusy) return;
+
+    state.modalSubmitBusy = true;
+    setFormBusy(event.target, true);
+
+    try {
+      await state.modalSubmit?.();
+    } finally {
+      state.modalSubmitBusy = false;
+
+      if (modal.classList.contains("active")) {
+        setFormBusy(event.target, false);
+        refreshIcons();
+      }
+    }
   }
 });
 
@@ -2638,6 +3145,17 @@ document.addEventListener("input", (event) => {
 
   if (event.target.id === "guildCode" || event.target.id === "searchCodeInput") {
     event.target.value = event.target.value.toUpperCase();
+  }
+});
+
+function isPopupOpen() {
+  return modal.classList.contains("active") || confirmModal.classList.contains("active");
+}
+
+
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden && realtimeGuildId) {
+    scheduleRealtimeReload(0);
   }
 });
 
