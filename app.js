@@ -61,6 +61,7 @@ const state = {
   loading: false,
   ownerGuilds: [],
   publicGuilds: [],
+  appliedGuildIds: (() => { try { return JSON.parse(localStorage.getItem("guildApplicationsSent") || "[]"); } catch { return []; } })(),
   guildApplications: [],
   subGuilds: [],
   subLeaders: [],
@@ -714,7 +715,21 @@ async function loadOwnerGuilds() {
 
 async function loadPublicGuilds() {
   const snap = await getDocs(collection(db, "guilds"));
-  state.publicGuilds = snap.docs.map((item) => ({ id: item.id, ...item.data() }));
+  state.publicGuilds = await Promise.all(snap.docs.map(async (item) => {
+    const guild = { id: item.id, ...item.data() };
+    try {
+      const linesSnap = await getDocs(collection(db, "guilds", item.id, "lines"));
+      const counts = await Promise.all(linesSnap.docs.map(async (line) => {
+        const playersSnap = await getDocs(collection(db, "guilds", item.id, "lines", line.id, "players"));
+        return playersSnap.size;
+      }));
+      guild.memberCount = counts.reduce((total, count) => total + count, 0);
+    } catch (error) {
+      console.warn(`Não foi possível contar os membros de ${item.id}:`, error);
+      guild.memberCount = 0;
+    }
+    return guild;
+  }));
 }
 
 async function loadGuildApplications(guildId) {
@@ -734,7 +749,9 @@ async function submitGuildApplication(guildId, data) {
     await addDoc(collection(db, "guilds", guildId, "applications"), {
       name, age, phone, status: "pending", createdAt: serverTimestamp(),
     });
-    toast("Solicitação enviada ao líder da guilda."); return true;
+    state.appliedGuildIds = [...new Set([...state.appliedGuildIds, guildId])];
+    try { localStorage.setItem("guildApplicationsSent", JSON.stringify(state.appliedGuildIds)); } catch {}
+    toast("Solicitação enviada. Se você for aceito, o líder retornará pelo WhatsApp informado."); return true;
   } catch (error) { console.error(error); toast("Não foi possível enviar a solicitação."); return false; }
 }
 
@@ -746,7 +763,7 @@ async function decideApplication(applicationId, status) {
 }
 
 function renderVerifiedBadge(guild) {
-  return guild?.verified === true ? `<span class="verified-badge" title="Guilda verificada" aria-label="Guilda verificada">${icon("check", 13)}</span>` : "";
+  return guild?.verified === true ? `<span class="verified-badge" title="Verificado" aria-label="Guilda verificada"><svg viewBox="0 0 24 24" role="img" aria-hidden="true"><path class="verified-rosette" d="M12 1.25c.7 0 1.36.38 1.7.98.33.59 1.02.87 1.67.68.68-.2 1.4-.02 1.88.46s.66 1.2.46 1.88c-.19.65.09 1.34.68 1.67.6.34.98 1 .98 1.7s-.38 1.36-.98 1.7c-.59.33-.87 1.02-.68 1.67.2.68.02 1.4-.46 1.88s-1.2.66-1.88.46c-.65-.19-1.34.09-1.67.68-.34.6-1  .98-1.7.98s-1.36-.38-1.7-.98c-.33-.59-1.02-.87-1.67-.68-.68.2-1.4.02-1.88-.46s-.66-1.2-.46-1.88c.19-.65-.09-1.34-.68-1.67-.6-.34-.98-1-.98-1.7s.38-1.36.98-1.7c.59-.33.87-1.02.68-1.67-.2-.68-.02-1.4.46-1.88s1.2-.66 1.88-.46c.65.19 1.34-.09 1.67-.68.34-.6 1-.98 1.7-.98z"/><path class="verified-check" d="m7.25 12.15 3.05 3.05 6.45-6.55"/></svg></span>` : "";
 }
 
 function renderApplications(guild) {
@@ -1149,7 +1166,6 @@ async function updateGuild(data) {
   const alerta = state.selectedGuild.alerta || "";
   const photoBlocked = state.selectedGuild.photoBlocked === true;
   const photoBlockReason = state.selectedGuild.photoBlockReason || "";
-  const verified = isOwner() ? data.verified === true : state.selectedGuild.verified === true;
 
   if (!name || !code) {
     toast("Nome e código são obrigatórios.");
@@ -1172,7 +1188,6 @@ async function updateGuild(data) {
     photoBlocked,
     photoBlockReason,
     alerta,
-    ...(isOwner() ? { verified } : {}),
     ownerId: state.selectedGuild.ownerId,
     ownerEmail: state.selectedGuild.ownerEmail,
     updatedAt: serverTimestamp(),
@@ -1949,14 +1964,14 @@ function renderHome() {
 
 function renderPublicGuildsPanel() {
   return `<section class="card public-guilds-panel"><div class="card-header"><div><h2>Encontre sua guilda</h2><p>Escolha uma guilda e envie seus dados ao líder.</p></div><button class="btn btn-secondary" data-action="refresh-public-guilds">${icon("refresh-cw")} Atualizar</button></div>
-    ${state.publicGuilds.length ? `<div class="cards-grid">${state.publicGuilds.map(guild => `<article class="line-card public-guild-card"><div class="card-title-row">${renderAvatar(guild,"md","shield","Logo da guilda")}<div><h3>${escapeHtml(guild.name)} ${renderVerifiedBadge(guild)}</h3><small>${escapeHtml(guild.description || "Guilda aberta a novos membros")}</small></div></div><div class="actions"><span class="badge">${icon("users",14)} Guilda</span><button class="btn btn-primary" data-action="apply-guild" data-id="${guild.id}">${icon("send")} Quero participar</button></div></article>`).join("")}</div>` : `<div class="empty">Nenhuma guilda disponível para inscrição.</div>`}</section>`;
+    ${state.publicGuilds.length ? `<div class="cards-grid">${state.publicGuilds.map(guild => { const applied = state.appliedGuildIds.includes(guild.id); const caption = String(guild.description || "").trim(); return `<article class="line-card public-guild-card ${applied ? "application-sent" : ""}"><div class="card-title-row">${renderAvatar(guild,"lg","shield","Foto da guilda")}<div class="public-guild-info"><h3>${escapeHtml(guild.name)} ${renderVerifiedBadge(guild)}</h3><p class="public-guild-caption">${caption ? escapeHtml(caption) : "Sem descrição informada."}</p></div></div>${applied ? `<div class="application-sent-note">${icon("circle-check",18)} Solicitação enviada. Se você for aceito, o líder falará com você pelo WhatsApp informado.</div>` : ""}<div class="actions"><span class="badge">${icon("users",14)} ${Number(guild.memberCount || 0)} membro(s)</span>${applied ? `<span class="badge application-sent-badge">${icon("check",14)} Inscrição enviada</span>` : `<button class="btn btn-primary" data-action="apply-guild" data-id="${guild.id}">${icon("send")} Quero participar</button>`}</div></article>`; }).join("")}</div>` : `<div class="empty">Nenhuma guilda disponível para inscrição.</div>`}</section>`;
 }
 
 function openApplicationModal(guildId) {
   const guild = state.publicGuilds.find(item => item.id === guildId);
   if (!guild) return;
   showModal(`Inscrever-se em ${guild.name}`, `<form id="applicationForm" class="form"><label>Seu nome<input id="applicationName" maxlength="80" required autocomplete="name" placeholder="Nome completo" /></label><label>Idade<input id="applicationAge" type="number" min="1" max="120" required /></label><label>Número para contato<input id="applicationPhone" type="tel" maxlength="24" required autocomplete="tel" placeholder="DDD + número" /></label><p class="sub-info">Seus dados serão enviados ao líder desta guilda para análise.</p><div class="form-actions"><button class="btn btn-secondary" type="button" data-action="close-modal">Cancelar</button><button class="btn btn-primary" type="submit">${icon("send")} Enviar inscrição</button></div></form>`);
-  document.querySelector("#applicationForm").addEventListener("submit", async (event) => { event.preventDefault(); const ok = await submitGuildApplication(guildId, { name: document.querySelector("#applicationName").value, age: document.querySelector("#applicationAge").value, phone: document.querySelector("#applicationPhone").value }); if (ok) closeModal(); });
+  document.querySelector("#applicationForm").addEventListener("submit", async (event) => { event.preventDefault(); const ok = await submitGuildApplication(guildId, { name: document.querySelector("#applicationName").value, age: document.querySelector("#applicationAge").value, phone: document.querySelector("#applicationPhone").value }); if (ok) { closeModal(); render(); } });
 }
 
 function renderSearchGuildPanel() {
@@ -2713,7 +2728,6 @@ function openEditGuildModal() {
           <input id="guildCode" value="${escapeHtml(guild.code)}" />
         </label>
 
-        ${isOwner() ? `<label class="verified-toggle"><input id="guildVerified" type="checkbox" ${guild.verified === true ? "checked" : ""} /><span><strong>Guilda verificada</strong><small>Exibe o selo azul ao lado do nome da guilda.</small></span></label>` : ""}
 
         ${renderUpload("guildLogo", "guildLogoPreview", "Foto da Guilda", guild.logoData || "", "image-plus")}
 
@@ -2735,7 +2749,6 @@ function openEditGuildModal() {
         code: document.querySelector("#guildCode").value,
         description: state.selectedGuild.description || "",
         logoData,
-        verified: document.querySelector("#guildVerified")?.checked === true,
       });
 
       if (ok) closeModal();
@@ -3121,6 +3134,7 @@ document.addEventListener("click", async (event) => {
   }
 
   if (action === "open-edit-guild") openEditGuildModal();
+
 
   if (action === "open-sub-help") openSubHelpModal();
 
