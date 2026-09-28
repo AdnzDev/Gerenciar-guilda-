@@ -307,6 +307,42 @@ label,
   background: rgba(245, 158, 11, .08);
 }
 
+.verified-badge {
+  display: inline-grid;
+  place-items: center;
+  width: 21px;
+  height: 21px;
+  vertical-align: 0.12em;
+  border-radius: 50%;
+  color: #fff;
+  background: #3897f0;
+  box-shadow: 0 0 0 2px rgba(56, 151, 240, .15);
+}
+.verified-badge svg { stroke-width: 3.5; }
+.verified-toggle { display: flex; align-items: center; gap: 12px; padding: 14px; border: 1px solid var(--border); border-radius: 16px; background: rgba(56,151,240,.07); }
+.verified-toggle input { width: 20px; height: 20px; accent-color: #3897f0; }
+.verified-toggle strong,.verified-toggle small { display:block; }
+.verified-toggle small { color: var(--muted2); margin-top: 3px; }
+.tabs { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.public-guilds-panel { max-width: 1000px; margin: 0 auto 24px; }
+.public-guild-card .card-title-row { align-items: flex-start; }
+.public-guild-card small { color: var(--muted2); line-height: 1.5; }
+.applications-section { border: 1px solid var(--border); background: rgba(17,17,28,.72); border-radius: 26px; padding: 22px; margin: 0 0 18px; }
+.applications-section .card-header { align-items: center; }
+.applications-section h2 { margin: 0; color: white; }
+.applications-section .card-header p { margin: 6px 0 0; color: var(--muted); }
+.application-grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(280px,1fr)); gap: 14px; }
+.application-card { border: 1px solid var(--border); border-radius: 20px; padding: 18px; background: #0d0d16; }
+.application-card-head { display:flex; align-items:center; gap:12px; }
+.application-avatar { display:grid; place-items:center; width:46px; height:46px; border-radius:15px; color:var(--purple); background:var(--purple-soft); }
+.application-card h3 { margin:0 0 7px; color:white; }
+.application-card dl { display:grid; grid-template-columns:1fr 1.3fr; gap:10px; margin:18px 0; }
+.application-card dl div { padding:11px; border-radius:13px; background:rgba(255,255,255,.035); overflow-wrap:anywhere; }
+.application-card dt { color:var(--muted2); font-size:12px; margin-bottom:4px; }
+.application-card dd { color:white; margin:0; font-weight:800; }
+.btn-green { color:white; background:#168a52; text-decoration:none; }
+.btn-green:hover { background:#117443; }
+
 .tabs {
   max-width: 520px;
   margin: 30px auto 0;
@@ -1091,6 +1127,7 @@ td strong {
 
   .tabs {
     max-width: none;
+    grid-template-columns: 1fr;
   }
 
   .card {

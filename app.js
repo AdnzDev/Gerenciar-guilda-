@@ -60,6 +60,8 @@ const state = {
   authMode: "login",
   loading: false,
   ownerGuilds: [],
+  publicGuilds: [],
+  guildApplications: [],
   subGuilds: [],
   subLeaders: [],
   mySubLeader: null,
@@ -710,6 +712,56 @@ async function loadOwnerGuilds() {
   }));
 }
 
+async function loadPublicGuilds() {
+  const snap = await getDocs(collection(db, "guilds"));
+  state.publicGuilds = snap.docs.map((item) => ({ id: item.id, ...item.data() }));
+}
+
+async function loadGuildApplications(guildId) {
+  if (!isOwner() || !guildId) { state.guildApplications = []; return; }
+  const snap = await getDocs(query(collection(db, "guilds", guildId, "applications"), orderBy("createdAt", "desc")));
+  state.guildApplications = snap.docs.map((item) => ({ id: item.id, ...item.data() }));
+}
+
+async function submitGuildApplication(guildId, data) {
+  const name = String(data.name || "").trim();
+  const age = Number(data.age);
+  const phone = String(data.phone || "").trim();
+  if (!name || !Number.isInteger(age) || age < 1 || age > 120 || phone.replace(/\D/g, "").length < 8) {
+    toast("Confira nome, idade e telefone."); return false;
+  }
+  try {
+    await addDoc(collection(db, "guilds", guildId, "applications"), {
+      name, age, phone, status: "pending", createdAt: serverTimestamp(),
+    });
+    toast("Solicitação enviada ao líder da guilda."); return true;
+  } catch (error) { console.error(error); toast("Não foi possível enviar a solicitação."); return false; }
+}
+
+async function decideApplication(applicationId, status) {
+  if (!isOwner() || !["accepted", "rejected"].includes(status)) return;
+  await updateDoc(doc(db, "guilds", state.selectedGuild.id, "applications", applicationId), { status, reviewedAt: serverTimestamp() });
+  await loadGuildApplications(state.selectedGuild.id); render();
+  toast(status === "accepted" ? "Inscrição aceita." : "Inscrição rejeitada.");
+}
+
+function renderVerifiedBadge(guild) {
+  return guild?.verified === true ? `<span class="verified-badge" title="Guilda verificada" aria-label="Guilda verificada">${icon("check", 13)}</span>` : "";
+}
+
+function renderApplications(guild) {
+  if (!isOwner()) return "";
+  const pending = state.guildApplications.filter((item) => item.status === "pending");
+  return `<section class="applications-section"><div class="card-header"><div><h2>Caixa de inscrições</h2><p>Solicitações pendentes para esta guilda.</p></div><span class="badge">${pending.length} pendente(s)</span></div>
+    ${pending.length ? `<div class="application-grid">${pending.map(item => {
+      let phone = String(item.phone || "").replace(/\D/g, "");
+      if (!phone.startsWith("55")) phone = `55${phone}`;
+      const message = `Olá! Recebemos sua inscrição para a guilda ${guild.name}.\n\nNome: ${item.name}\nIdade: ${item.age}\nContato: ${item.phone}`;
+      const wa = `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
+      return `<article class="application-card"><div class="application-card-head"><span class="application-avatar">${icon("user-round", 22)}</span><div><h3>${escapeHtml(item.name)}</h3><span class="badge yellow">Pendente</span></div></div><dl><div><dt>Idade</dt><dd>${escapeHtml(item.age)}</dd></div><div><dt>Contato</dt><dd>${escapeHtml(item.phone)}</dd></div></dl><div class="actions"><a class="btn btn-green" href="${wa}" target="_blank" rel="noopener">${icon("message-circle")} Chamar no WhatsApp</a><button class="btn btn-primary" data-action="accept-application" data-id="${item.id}">${icon("check")} Aceitar</button><button class="btn btn-danger" data-action="reject-application" data-id="${item.id}">${icon("x")} Rejeitar</button></div></article>`;
+    }).join("")}</div>` : `<div class="empty">Nenhuma inscrição pendente no momento.</div>`}</section>`;
+}
+
 async function loadSubGuilds() {
   if (!state.user) {
     state.subGuilds = [];
@@ -822,6 +874,8 @@ async function loadGuildTree(guildId, publicMode = false, options = {}) {
     state.selectedGuild = guild;
     state.selectedLines = lines;
     state.publicMode = publicMode;
+    if (guild.ownerId === state.user?.uid) await loadGuildApplications(guild.id);
+    else state.guildApplications = [];
 
     if (preserveView && previousView === "line" && previousLineId) {
       const updatedLine = lines.find((line) => line.id === previousLineId);
@@ -1095,6 +1149,7 @@ async function updateGuild(data) {
   const alerta = state.selectedGuild.alerta || "";
   const photoBlocked = state.selectedGuild.photoBlocked === true;
   const photoBlockReason = state.selectedGuild.photoBlockReason || "";
+  const verified = isOwner() ? data.verified === true : state.selectedGuild.verified === true;
 
   if (!name || !code) {
     toast("Nome e código são obrigatórios.");
@@ -1117,6 +1172,7 @@ async function updateGuild(data) {
     photoBlocked,
     photoBlockReason,
     alerta,
+    ...(isOwner() ? { verified } : {}),
     ownerId: state.selectedGuild.ownerId,
     ownerEmail: state.selectedGuild.ownerEmail,
     updatedAt: serverTimestamp(),
@@ -1871,6 +1927,11 @@ function renderHome() {
           Buscar Guilda
         </button>
 
+        <button class="tab ${state.homeTab === "join" ? "active" : ""}" data-action="tab-join">
+          ${icon("user-plus")}
+          Entrar em uma Guilda
+        </button>
+
         <button class="tab ${state.homeTab === "login" ? "active" : ""}" data-action="tab-login">
           ${icon("user")}
           Login / Criar
@@ -1881,9 +1942,21 @@ function renderHome() {
     ${
       state.homeTab === "search"
         ? renderSearchGuildPanel()
-        : renderLoginPanel()
+        : state.homeTab === "join" ? renderPublicGuildsPanel() : renderLoginPanel()
     }
   `;
+}
+
+function renderPublicGuildsPanel() {
+  return `<section class="card public-guilds-panel"><div class="card-header"><div><h2>Encontre sua guilda</h2><p>Escolha uma guilda e envie seus dados ao líder.</p></div><button class="btn btn-secondary" data-action="refresh-public-guilds">${icon("refresh-cw")} Atualizar</button></div>
+    ${state.publicGuilds.length ? `<div class="cards-grid">${state.publicGuilds.map(guild => `<article class="line-card public-guild-card"><div class="card-title-row">${renderAvatar(guild,"md","shield","Logo da guilda")}<div><h3>${escapeHtml(guild.name)} ${renderVerifiedBadge(guild)}</h3><small>${escapeHtml(guild.description || "Guilda aberta a novos membros")}</small></div></div><div class="actions"><span class="badge">${icon("users",14)} Guilda</span><button class="btn btn-primary" data-action="apply-guild" data-id="${guild.id}">${icon("send")} Quero participar</button></div></article>`).join("")}</div>` : `<div class="empty">Nenhuma guilda disponível para inscrição.</div>`}</section>`;
+}
+
+function openApplicationModal(guildId) {
+  const guild = state.publicGuilds.find(item => item.id === guildId);
+  if (!guild) return;
+  showModal(`Inscrever-se em ${guild.name}`, `<form id="applicationForm" class="form"><label>Seu nome<input id="applicationName" maxlength="80" required autocomplete="name" placeholder="Nome completo" /></label><label>Idade<input id="applicationAge" type="number" min="1" max="120" required /></label><label>Número para contato<input id="applicationPhone" type="tel" maxlength="24" required autocomplete="tel" placeholder="DDD + número" /></label><p class="sub-info">Seus dados serão enviados ao líder desta guilda para análise.</p><div class="form-actions"><button class="btn btn-secondary" type="button" data-action="close-modal">Cancelar</button><button class="btn btn-primary" type="submit">${icon("send")} Enviar inscrição</button></div></form>`);
+  document.querySelector("#applicationForm").addEventListener("submit", async (event) => { event.preventDefault(); const ok = await submitGuildApplication(guildId, { name: document.querySelector("#applicationName").value, age: document.querySelector("#applicationAge").value, phone: document.querySelector("#applicationPhone").value }); if (ok) closeModal(); });
 }
 
 function renderSearchGuildPanel() {
@@ -2017,7 +2090,7 @@ function renderAdmin() {
               <div class="line-card">
                 <div class="card-title-row">
                   ${renderAvatar(guild, "md", "shield", "Logo da guilda")}
-                  <h3>${escapeHtml(guild.name)}</h3>
+                  <h3>${escapeHtml(guild.name)} ${renderVerifiedBadge(guild)}</h3>
                 </div>
 
                 <p>${escapeHtml(guild.description || "Sem descrição.")}</p>
@@ -2204,9 +2277,9 @@ function renderGuild() {
         ${!owner && !sub ? `<span class="badge">${icon("eye", 14)} Visualização pública</span>` : ""}
         ${renderPhotoBlockBadge(guild)}
 
-        <div class="title-row">
-          ${renderAvatar(guild, "lg", "shield", "Logo da guilda")}
-          <h1>${escapeHtml(guild.name)}</h1>
+      <div class="title-row">
+        ${renderAvatar(guild, "lg", "shield", "Logo da guilda")}
+          <h1>${escapeHtml(guild.name)} ${renderVerifiedBadge(guild)}</h1>
         </div>
 
         <p>${escapeHtml(guild.description || "Sem descrição.")}</p>
@@ -2258,6 +2331,8 @@ function renderGuild() {
     </div>
 
     ${renderGuildAlert(guild)}
+
+    ${renderApplications(guild)}
 
     <div class="stats">
       <div class="stat">
@@ -2638,6 +2713,8 @@ function openEditGuildModal() {
           <input id="guildCode" value="${escapeHtml(guild.code)}" />
         </label>
 
+        ${isOwner() ? `<label class="verified-toggle"><input id="guildVerified" type="checkbox" ${guild.verified === true ? "checked" : ""} /><span><strong>Guilda verificada</strong><small>Exibe o selo azul ao lado do nome da guilda.</small></span></label>` : ""}
+
         ${renderUpload("guildLogo", "guildLogoPreview", "Foto da Guilda", guild.logoData || "", "image-plus")}
 
         <div class="form-actions">
@@ -2658,6 +2735,7 @@ function openEditGuildModal() {
         code: document.querySelector("#guildCode").value,
         description: state.selectedGuild.description || "",
         logoData,
+        verified: document.querySelector("#guildVerified")?.checked === true,
       });
 
       if (ok) closeModal();
@@ -3011,6 +3089,12 @@ document.addEventListener("click", async (event) => {
     state.homeTab = "login";
     render();
   }
+
+  if (action === "tab-join") { state.homeTab = "join"; try { await loadPublicGuilds(); } catch (error) { console.error(error); toast("Não foi possível carregar as guildas."); } render(); }
+  if (action === "refresh-public-guilds") { try { await loadPublicGuilds(); render(); } catch (error) { console.error(error); toast("Não foi possível atualizar a lista."); } }
+  if (action === "apply-guild") openApplicationModal(id);
+  if (action === "accept-application") await decideApplication(id, "accepted");
+  if (action === "reject-application") await decideApplication(id, "rejected");
 
   if (action === "switch-auth") {
     state.authMode = state.authMode === "login" ? "register" : "login";
