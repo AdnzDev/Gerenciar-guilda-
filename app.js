@@ -400,6 +400,45 @@ function startGuildRealtime(guildId, publicMode = false) {
     )
   );
 
+  // Contador do correio: atualiza em tempo real sempre que uma nova
+  // solicitação pendente chega ou deixa de estar pendente.
+  if (isOwner()) {
+    guildRealtimeUnsubs.push(
+      onSnapshot(
+        query(
+          collection(db, "guilds", guildId, "applications"),
+          where("status", "==", "pending")
+        ),
+        (snapshot) => {
+          if (state.selectedGuild?.id !== guildId || !isOwner()) return;
+
+          state.pendingApplicationsCount = snapshot.size;
+
+          // Atualiza somente o contador para não interromper outras ações
+          // que o líder esteja fazendo na tela.
+          const inbox = document.querySelector(".inbox-button");
+          if (inbox) {
+            const currentBadge = inbox.querySelector(".inbox-count");
+            if (snapshot.size > 0) {
+              const label = snapshot.size > 99 ? "99+" : String(snapshot.size);
+              if (currentBadge) {
+                currentBadge.textContent = label;
+              } else {
+                const badge = document.createElement("span");
+                badge.className = "inbox-count";
+                badge.textContent = label;
+                inbox.appendChild(badge);
+              }
+            } else if (currentBadge) {
+              currentBadge.remove();
+            }
+          }
+        },
+        (error) => console.warn("Listener de inscrições falhou:", error)
+      )
+    );
+  }
+
   syncPlayerRealtimeListeners();
   startTurboSync();
 }
@@ -2250,11 +2289,11 @@ function loadPendingApplicationCount(guildId) {
 
 function renderVerifiedBadge(verified) {
   if (verified !== true) return "";
-  // Selo visual inspirado no verificado do Instagram: círculo azul sólido + check branco.
-  // SVG inline garante que o check apareça mesmo antes/depois do Lucide processar os ícones.
+  // Badge com recortes suaves, inspirado no selo azul de verificação do Instagram.
   return `<span class="verified-badge" title="Guilda verificada" aria-label="Guilda verificada">
     <svg class="verified-badge-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-      <path d="M20 6.5 9.5 17 4 11.5" fill="none" stroke="currentColor" stroke-width="2.7" stroke-linecap="round" stroke-linejoin="round"></path>
+      <path class="verified-badge-shape" d="M12 1.25l2.05 1.1 2.32-.18 1.15 2.03 2.04 1.15-.18 2.32L20.5 9.7 21.6 12l-1.1 2.3.18 2.33-2.04 1.14-1.15 2.04-2.32-.18L12 20.75l-2.3-1.12-2.33.18-1.14-2.04-2.04-1.14.18-2.33L2.9 12 4 9.7 3.82 7.67l2.04-1.15L7.37 4.14l2.33.18L12 1.25z" fill="currentColor"></path>
+      <path d="M8.1 12.05l2.35 2.35 5.55-5.55" fill="none" stroke="#fff" stroke-width="2.05" stroke-linecap="round" stroke-linejoin="round"></path>
     </svg>
   </span>`;
 }
@@ -2790,6 +2829,11 @@ function openCreateGuildModal() {
           <input id="guildCode" placeholder="Ex: 1234567890" value="${createGuildCode()}" />
         </label>
 
+        <label>
+          Descrição
+          <textarea id="guildDescription" maxlength="500" placeholder="Conte um pouco sobre a guilda, requisitos e objetivo..."></textarea>
+        </label>
+
         ${renderUpload("guildLogo", "guildLogoPreview", "Foto da Guilda", "", "image-plus")}
 
         <div class="form-actions">
@@ -2805,7 +2849,7 @@ function openCreateGuildModal() {
       const ok = await createGuild({
         name: document.querySelector("#guildName").value,
         code: document.querySelector("#guildCode").value,
-        description: "",
+        description: document.querySelector("#guildDescription").value,
         logoData,
       });
 
@@ -2831,8 +2875,12 @@ function openEditGuildModal() {
           <input id="guildCode" value="${escapeHtml(guild.code)}" />
         </label>
 
-        ${renderUpload("guildLogo", "guildLogoPreview", "Foto da Guilda", guild.logoData || "", "image-plus")}
+        <label>
+          Descrição
+          <textarea id="guildDescription" maxlength="500" placeholder="Conte um pouco sobre a guilda, requisitos e objetivo...">${escapeHtml(guild.description || "")}</textarea>
+        </label>
 
+        ${renderUpload("guildLogo", "guildLogoPreview", "Foto da Guilda", guild.logoData || "", "image-plus")}
 
         <div class="form-actions">
           <button class="btn btn-secondary" type="button" data-action="close-modal">Cancelar</button>
@@ -2850,7 +2898,7 @@ function openEditGuildModal() {
       const ok = await updateGuild({
         name: document.querySelector("#guildName").value,
         code: document.querySelector("#guildCode").value,
-        description: state.selectedGuild.description || "",
+        description: document.querySelector("#guildDescription").value,
         logoData,
       });
 

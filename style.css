@@ -1431,43 +1431,29 @@ td strong {
 
 /* Verificação e inscrições */
 .verified-badge {
-  display: inline-grid;
-  place-items: center;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   width: 19px;
   height: 19px;
   margin-left: 6px;
-  border-radius: 50%;
-  color: #fff;
-  background: #3897f0;
-  vertical-align: -2px;
+  vertical-align: -3px;
   flex: 0 0 auto;
   line-height: 0;
-  box-shadow: none;
+  color: #3797f0;
+  filter: drop-shadow(0 1px 2px rgba(0,0,0,.16));
 }
 
 .verified-badge-icon {
-  width: 14px;
-  height: 14px;
+  width: 19px;
+  height: 19px;
   display: block;
+  overflow: visible;
 }
 
 .title-row .verified-badge {
   margin-left: 7px;
 }
-
-.verified-toggle {
-  display: flex !important;
-  align-items: center;
-  gap: 12px;
-  padding: 14px;
-  border: 1px solid var(--border);
-  border-radius: 14px;
-  background: rgba(255,255,255,.025);
-  cursor: pointer;
-}
-.verified-toggle input { width: 18px; height: 18px; accent-color: #3897f0; }
-.verified-toggle span { display:flex; flex-direction:column; gap:3px; }
-.verified-toggle small { color: var(--muted); }
 
 .guild-application-browser { max-width: 1000px; margin: 0 auto; }
 .guild-application-browser > input { margin: 10px 0 18px; }
@@ -1520,20 +1506,22 @@ td strong {
 .inbox-button:hover { transform: translateY(-2px); border-color: rgba(155,92,255,.55); box-shadow: 0 14px 35px rgba(0,0,0,.3), 0 0 28px rgba(155,92,255,.22); }
 .inbox-count {
   position: absolute;
-  top: -6px;
-  right: -6px;
-  min-width: 21px;
-  height: 21px;
-  padding: 0 6px;
-  border-radius: 999px;
-  display: grid;
-  place-items: center;
-  background: #ef4444;
-  color: #fff;
-  border: 2px solid var(--bg);
+  top: 6px;
+  right: 7px;
+  min-width: 0;
+  height: auto;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  display: block;
+  background: transparent;
+  color: #ef4444;
   font-size: 10px;
-  font-weight: 950;
-  box-shadow: 0 0 14px rgba(239,68,68,.42);
+  line-height: 1;
+  font-weight: 900;
+  letter-spacing: -0.25px;
+  text-shadow: 0 0 7px rgba(239,68,68,.45);
+  pointer-events: none;
 }
 .verification-notice { text-align:center; padding: 8px 4px 2px; }
 .verification-notice-badge {
@@ -1576,4 +1564,12 @@ td strong {
   .application-card .actions .btn { width:100%; }
   .modal-box { width: calc(100vw - 20px); max-height: 90vh; border-radius: 22px; }
   .modal-body { padding: 16px; }
+}
+
+
+/* Descrições de guildas e formulários */
+.form textarea {
+  min-height: 96px;
+  resize: vertical;
+  line-height: 1.5;
 }
