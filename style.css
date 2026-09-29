@@ -307,66 +307,6 @@ label,
   background: rgba(245, 158, 11, .08);
 }
 
-.verified-badge {
-  display: inline-grid;
-  place-items: center;
-  width: 22px;
-  height: 22px;
-  vertical-align: -0.16em;
-  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, .18));
-}
-.verified-badge svg { width: 100%; height: 100%; }
-.verified-rosette { fill: #3897f0; }
-.verified-check { fill: none; stroke: #fff; stroke-width: 2.3; stroke-linecap: round; stroke-linejoin: round; }
-.verified-toggle { display: flex; align-items: center; gap: 12px; padding: 14px; border: 1px solid var(--border); border-radius: 16px; background: rgba(56,151,240,.07); }
-.verified-toggle input { width: 20px; height: 20px; accent-color: #3897f0; }
-.verified-toggle strong,.verified-toggle small { display:block; }
-.verified-toggle small { color: var(--muted2); margin-top: 3px; }
-.tabs { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-.public-guilds-panel { max-width: 1000px; margin: 0 auto 24px; }
-.public-guild-card .card-title-row { align-items: flex-start; }
-.public-guild-info { min-width: 0; }
-.public-guild-info h3 { overflow-wrap: anywhere; }
-.public-guild-card .public-guild-caption { color: var(--muted2); line-height: 1.55; margin: 7px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
-.applications-section { border: 1px solid var(--border); background: rgba(17,17,28,.72); border-radius: 26px; padding: 22px; margin: 0 0 18px; }
-.applications-section .card-header { align-items: center; }
-.applications-section h2 { margin: 0; color: white; }
-.applications-section .card-header p { margin: 6px 0 0; color: var(--muted); }
-.application-grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(280px,1fr)); gap: 14px; }
-.application-card { border: 1px solid var(--border); border-radius: 20px; padding: 18px; background: #0d0d16; }
-.application-card-head { display:flex; align-items:center; gap:12px; }
-.application-avatar { display:grid; place-items:center; width:46px; height:46px; border-radius:15px; color:var(--purple); background:var(--purple-soft); }
-.application-card h3 { margin:0 0 7px; color:white; }
-.application-card dl { display:grid; grid-template-columns:1fr 1.3fr; gap:10px; margin:18px 0; }
-.application-card dl div { padding:11px; border-radius:13px; background:rgba(255,255,255,.035); overflow-wrap:anywhere; }
-.application-card dt { color:var(--muted2); font-size:12px; margin-bottom:4px; }
-.application-card dd { color:white; margin:0; font-weight:800; }
-.btn-green { color:white; background:#168a52; text-decoration:none; }
-.btn-green:hover { background:#117443; }
-.public-guild-card.application-sent {
-  border-color: rgba(34, 197, 94, .92);
-  animation: application-neon 1.8s ease-in-out infinite;
-}
-.application-sent-note {
-  display:flex;
-  align-items:flex-start;
-  gap:9px;
-  margin-top:15px;
-  padding:12px 13px;
-  border-radius:15px;
-  color:#bbf7d0;
-  background:rgba(34,197,94,.10);
-  border:1px solid rgba(34,197,94,.28);
-  line-height:1.5;
-  font-size:14px;
-}
-.application-sent-note svg { flex:0 0 auto; color:#4ade80; margin-top:1px; }
-.application-sent-badge { color:#bbf7d0; border-color:rgba(34,197,94,.45); background:rgba(34,197,94,.12); }
-@keyframes application-neon {
-  0%, 100% { box-shadow:0 0 0 1px rgba(34,197,94,.18), 0 0 12px rgba(34,197,94,.22); }
-  50% { box-shadow:0 0 0 2px rgba(34,197,94,.42), 0 0 28px rgba(34,197,94,.55); }
-}
-
 .tabs {
   max-width: 520px;
   margin: 30px auto 0;
@@ -1151,7 +1091,6 @@ td strong {
 
   .tabs {
     max-width: none;
-    grid-template-columns: 1fr;
   }
 
   .card {
@@ -1488,4 +1427,62 @@ td strong {
     transform: scale(1.07);
     filter: drop-shadow(0 0 14px rgba(255, 184, 77, 0.7));
   }
+}
+
+/* Verificação e inscrições */
+.verified-badge {
+  display: inline-grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  margin-left: 6px;
+  border-radius: 50%;
+  color: #fff;
+  background: #3897f0;
+  box-shadow: 0 0 0 2px rgba(56,151,240,.14), 0 0 14px rgba(56,151,240,.35);
+  vertical-align: middle;
+}
+
+.verified-toggle {
+  display: flex !important;
+  align-items: center;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: rgba(255,255,255,.025);
+  cursor: pointer;
+}
+.verified-toggle input { width: 18px; height: 18px; accent-color: #3897f0; }
+.verified-toggle span { display:flex; flex-direction:column; gap:3px; }
+.verified-toggle small { color: var(--muted); }
+
+.guild-application-browser { max-width: 1000px; margin: 0 auto; }
+.guild-application-browser > input { margin: 10px 0 18px; }
+.public-guild-list, .applications-list { display: grid; gap: 14px; }
+.public-guild-card, .application-card {
+  border: 1px solid var(--border);
+  background: rgba(255,255,255,.025);
+  border-radius: 18px;
+  padding: 18px;
+  box-shadow: 0 10px 30px rgba(0,0,0,.12);
+}
+.public-guild-card .card-title-row { align-items: center; }
+.public-guild-card h3, .application-card h3 { margin: 0; }
+.public-guild-card p { color: var(--muted); margin: 12px 0 16px; }
+.application-top { display:flex; justify-content:space-between; gap:16px; align-items:flex-start; }
+.application-top h3 { margin-top: 9px; }
+.application-top small { color: var(--muted); white-space: nowrap; }
+.application-grid { display:grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap:10px; margin:16px 0; }
+.application-grid > div { padding:12px; border-radius:12px; background:rgba(255,255,255,.035); }
+.application-grid span { display:block; color:var(--muted); font-size:12px; margin-bottom:4px; }
+.application-grid strong { word-break:break-word; }
+.btn-whatsapp { background:#25d366; color:#06140b !important; border-color:#25d366 !important; }
+.btn-whatsapp:hover { filter:brightness(1.06); transform:translateY(-1px); }
+
+@media (max-width: 640px) {
+  .application-top { flex-direction: column; }
+  .application-grid { grid-template-columns: 1fr; }
+  .application-card .actions, .public-guild-card .actions { flex-direction: column; }
+  .application-card .actions .btn, .public-guild-card .actions .btn { width:100%; }
 }
