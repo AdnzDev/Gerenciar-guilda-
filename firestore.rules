@@ -57,7 +57,7 @@ service cloud.firestore {
       allow update: if canEditGuild(guildId)
         && request.resource.data.ownerId == resource.data.ownerId
         && request.resource.data.ownerEmail == resource.data.ownerEmail
-        && (isOwner(guildId) || !request.resource.data.diff(resource.data).affectedKeys().hasAny(["verified"]));
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(["verified"]);
 
       allow delete: if signedIn()
         && resource.data.ownerId == request.auth.uid;

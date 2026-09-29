@@ -72,6 +72,7 @@ const state = {
   publicGuildSearch: "",
   guildApplications: [],
   applicationsLoading: false,
+  pendingApplicationsCount: 0,
   ranking: [],
   actionLogs: [],
   playerSearch: "",
@@ -823,9 +824,19 @@ async function loadGuildTree(guildId, publicMode = false, options = {}) {
       lines.push(line);
     }
 
+    const wasVerified = guild.verified === true;
     state.selectedGuild = guild;
     state.selectedLines = lines;
     state.publicMode = publicMode;
+    loadPendingApplicationCount(guild.id);
+
+    if (isOwner() && wasVerified) {
+      const noticeKey = `guild_verified_notice_${guild.id}`;
+      if (localStorage.getItem(noticeKey) !== "1") {
+        localStorage.setItem(noticeKey, "1");
+        setTimeout(() => openVerificationNotice(guild), 120);
+      }
+    }
 
     if (preserveView && previousView === "line" && previousLineId) {
       const updatedLine = lines.find((line) => line.id === previousLineId);
@@ -1100,7 +1111,6 @@ async function updateGuild(data) {
   const alerta = state.selectedGuild.alerta || "";
   const photoBlocked = state.selectedGuild.photoBlocked === true;
   const photoBlockReason = state.selectedGuild.photoBlockReason || "";
-  const verified = isOwner() ? data.verified === true : state.selectedGuild.verified === true;
 
   if (!name || !code) {
     toast("Nome e código são obrigatórios.");
@@ -1123,7 +1133,6 @@ async function updateGuild(data) {
     photoBlocked,
     photoBlockReason,
     alerta,
-    verified,
     ownerId: state.selectedGuild.ownerId,
     ownerEmail: state.selectedGuild.ownerEmail,
     updatedAt: serverTimestamp(),
@@ -2208,9 +2217,46 @@ function renderGuildRankings() {
   `;
 }
 
+function openVerificationNotice(guild) {
+  if (!guild || guild.verified !== true) return;
+  showModal(
+    "Guilda verificada",
+    `<div class="verification-notice">
+      <div class="verification-notice-badge">${icon("check", 30)}</div>
+      <h2>Parabéns! Sua guilda foi verificada.</h2>
+      <p>O selo de verificação foi ativado pela administração do Guild Manager. Ele agora aparece ao lado do nome da guilda.</p>
+      <div class="form-actions">
+        <button class="btn btn-primary" type="button" data-action="close-modal">${icon("badge-check")} Entendi</button>
+      </div>
+    </div>`
+  );
+}
+
+function loadPendingApplicationCount(guildId) {
+  if (!guildId || !isOwner()) {
+    state.pendingApplicationsCount = 0;
+    return;
+  }
+  getDocs(query(
+    collection(db, "guilds", guildId, "applications"),
+    where("status", "==", "pending")
+  )).then((snap) => {
+    if (state.selectedGuild?.id === guildId) {
+      state.pendingApplicationsCount = snap.size;
+      render();
+    }
+  }).catch((error) => console.warn("Não foi possível contar inscrições:", error));
+}
+
 function renderVerifiedBadge(verified) {
   if (verified !== true) return "";
-  return `<span class="verified-badge" title="Guilda verificada" aria-label="Guilda verificada">${icon("check", 11)}</span>`;
+  // Selo visual inspirado no verificado do Instagram: círculo azul sólido + check branco.
+  // SVG inline garante que o check apareça mesmo antes/depois do Lucide processar os ícones.
+  return `<span class="verified-badge" title="Guilda verificada" aria-label="Guilda verificada">
+    <svg class="verified-badge-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <path d="M20 6.5 9.5 17 4 11.5" fill="none" stroke="currentColor" stroke-width="2.7" stroke-linecap="round" stroke-linejoin="round"></path>
+    </svg>
+  </span>`;
 }
 
 function normalizeWhatsApp(value) {
@@ -2282,6 +2328,7 @@ async function updateApplicationStatus(applicationId, status) {
   });
   const item = state.guildApplications.find(a => a.id === applicationId);
   if (item) item.status = status;
+  state.pendingApplicationsCount = Math.max(0, state.pendingApplicationsCount - (status === "pending" ? 0 : 1));
   modalBody.innerHTML = renderApplicationsModal();
   refreshIcons();
   toast(status === "accepted" ? "Membro aceito." : "Inscrição rejeitada.");
@@ -2389,9 +2436,9 @@ function renderGuild() {
                 Sublíderes
               </button>
 
-              <button class="btn btn-secondary" data-action="open-applications">
-                ${icon("mail")}
-                Inscrições
+              <button class="inbox-button" data-action="open-applications" title="Correio de inscrições" aria-label="Correio de inscrições">
+                ${icon("mail", 22)}
+                ${state.pendingApplicationsCount > 0 ? `<span class="inbox-count">${state.pendingApplicationsCount > 99 ? "99+" : state.pendingApplicationsCount}</span>` : ""}
               </button>
 
               <button class="btn btn-danger" data-action="delete-selected-guild">
@@ -2786,15 +2833,6 @@ function openEditGuildModal() {
 
         ${renderUpload("guildLogo", "guildLogoPreview", "Foto da Guilda", guild.logoData || "", "image-plus")}
 
-        ${isOwner() ? `
-          <label class="check-row verified-toggle">
-            <input id="guildVerified" type="checkbox" ${guild.verified === true ? "checked" : ""} />
-            <span>
-              <strong>Guilda verificada</strong>
-              <small>Exibe o selo azul de verificação ao lado do nome da guilda.</small>
-            </span>
-          </label>
-        ` : ""}
 
         <div class="form-actions">
           <button class="btn btn-secondary" type="button" data-action="close-modal">Cancelar</button>
@@ -2814,7 +2852,6 @@ function openEditGuildModal() {
         code: document.querySelector("#guildCode").value,
         description: state.selectedGuild.description || "",
         logoData,
-        verified: document.querySelector("#guildVerified")?.checked === true,
       });
 
       if (ok) closeModal();
