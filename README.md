@@ -127,6 +127,22 @@ Tipos visuais disponíveis:
 
 **Importante:** se `siteNotices` não aparece ainda na lista de coleções, isso é normal. O Firestore só mostra a coleção depois que o primeiro documento é criado.
 
+## Avisos oficiais
+
+A coleção `siteNotices` fica **na raiz do Cloud Firestore**, no mesmo nível de `guilds` e `users`. Ela **não fica dentro de uma guilda**.
+
+No painel do banco, a estrutura deve aparecer assim:
+
+```text
+(default)
+├── guilds
+├── users
+└── siteNotices
+    └── ID_DO_AVISO
+```
+
+Se `siteNotices` ainda não aparece, crie a coleção em **Iniciar coleção** no nível principal do banco. Depois crie o primeiro documento com `title`, `message`, `active`, `type` e `createdAt`. A coleção passa a aparecer automaticamente na lista.
+
 ## Correio
 
 O correio possui três abas:

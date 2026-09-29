@@ -2307,8 +2307,8 @@ function renderVerifiedBadge(verified) {
   // Badge com recortes suaves, inspirado no selo azul de verificação do Instagram.
   return `<span class="verified-badge" title="Guilda verificada" aria-label="Guilda verificada">
     <svg class="verified-badge-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-      <path class="verified-badge-shape" d="M12 1.25l2.05 1.1 2.32-.18 1.15 2.03 2.04 1.15-.18 2.32L20.5 9.7 21.6 12l-1.1 2.3.18 2.33-2.04 1.14-1.15 2.04-2.32-.18L12 20.75l-2.3-1.12-2.33.18-1.14-2.04-2.04-1.14.18-2.33L2.9 12 4 9.7 3.82 7.67l2.04-1.15L7.37 4.14l2.33.18L12 1.25z" fill="currentColor"></path>
-      <path d="M8.1 12.05l2.35 2.35 5.55-5.55" fill="none" stroke="#fff" stroke-width="2.05" stroke-linecap="round" stroke-linejoin="round"></path>
+      <path class="verified-badge-shape" d="M12 1.55l2.05 1.15 2.35-.08 1.08 2.08 2.08 1.08-.08 2.35L20.65 12l.83 2.05-.83 2.05.08 2.35-2.08 1.08-1.08 2.08-2.35-.08L12 22.45l-2.05-.92-2.35.08-1.08-2.08-2.08-1.08.08-2.35L3.35 12l-.83-2.05.83-2.05-.08-2.35 2.08-1.08L7.6 2.62l2.35.08L12 1.55z" fill="currentColor"></path>
+      <path d="M7.55 12.05l2.75 2.75 6.15-6.15" fill="none" stroke="#fff" stroke-width="2.15" stroke-linecap="round" stroke-linejoin="round"></path>
     </svg>
   </span>`;
 }

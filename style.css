@@ -1434,8 +1434,11 @@ td strong {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 19px;
-  height: 19px;
+  width: 20px;
+  height: 20px;
+  min-width: 20px;
+  min-height: 20px;
+  aspect-ratio: 1 / 1;
   margin-left: 6px;
   vertical-align: -3px;
   flex: 0 0 auto;
@@ -1445,8 +1448,11 @@ td strong {
 }
 
 .verified-badge-icon {
-  width: 19px;
-  height: 19px;
+  width: 20px;
+  height: 20px;
+  min-width: 20px;
+  min-height: 20px;
+  aspect-ratio: 1 / 1;
   display: block;
   overflow: visible;
 }
