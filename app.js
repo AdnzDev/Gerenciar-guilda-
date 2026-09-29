@@ -2276,7 +2276,7 @@ function openVerificationNotice(guild) {
   showModal(
     "Guilda verificada",
     `<div class="verification-notice">
-      <div class="verification-notice-badge">${icon("check", 30)}</div>
+      <div class="verification-notice-badge">${renderVerifiedBadge(guild.verified)}</div>
       <h2>Parabéns! Sua guilda foi verificada.</h2>
       <p>O selo de verificação foi ativado pela administração do Guild Manager. Ele agora aparece ao lado do nome da guilda.</p>
       <div class="form-actions">
