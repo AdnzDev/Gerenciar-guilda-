@@ -1434,24 +1434,24 @@ td strong {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 20px;
-  height: 20px;
-  min-width: 20px;
-  min-height: 20px;
+  width: 22px;
+  height: 22px;
+  min-width: 22px;
+  min-height: 22px;
   aspect-ratio: 1 / 1;
   margin-left: 6px;
-  vertical-align: -3px;
+  vertical-align: -4px;
   flex: 0 0 auto;
   line-height: 0;
   color: #3797f0;
-  filter: drop-shadow(0 1px 2px rgba(0,0,0,.16));
+  filter: drop-shadow(0 1px 2px rgba(0,0,0,.18));
 }
 
 .verified-badge-icon {
-  width: 20px;
-  height: 20px;
-  min-width: 20px;
-  min-height: 20px;
+  width: 22px;
+  height: 22px;
+  min-width: 22px;
+  min-height: 22px;
   aspect-ratio: 1 / 1;
   display: block;
   overflow: visible;
