@@ -1962,3 +1962,158 @@ td strong {
   .inbox-notification-bubble { font-size:10px; max-width:130px; }
   .header-card .header-actions { grid-template-columns: 1fr 1fr !important; }
 }
+
+/* ===== Ajuste final do correio e controles no mobile ===== */
+.inbox-stack {
+  position: relative !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: flex-end !important;
+  gap: 5px !important;
+  z-index: 1000 !important;
+  isolation: isolate;
+}
+.inbox-stack .inbox-button {
+  position: relative !important;
+  inset: auto !important;
+  width: 50px !important;
+  min-width: 50px !important;
+  max-width: 50px !important;
+  height: 50px !important;
+  min-height: 50px !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  border: 1px solid rgba(155,92,255,.42) !important;
+  border-radius: 15px !important;
+  background: linear-gradient(145deg, rgba(155,92,255,.22), rgba(19,18,31,.98)) !important;
+  color: #fff !important;
+  display: grid !important;
+  place-items: center !important;
+  cursor: pointer !important;
+  pointer-events: auto !important;
+  overflow: visible !important;
+  z-index: 1001 !important;
+  box-shadow: 0 8px 22px rgba(0,0,0,.3), 0 0 20px rgba(155,92,255,.13) !important;
+}
+.inbox-stack .inbox-button:active { transform: scale(.96); }
+.inbox-stack .inbox-icon-wrap {
+  position: static !important;
+  width: 25px !important;
+  height: 25px !important;
+  display: grid !important;
+  place-items: center !important;
+  pointer-events: none !important;
+}
+.inbox-stack .inbox-icon-wrap svg {
+  width: 25px !important;
+  height: 25px !important;
+  display: block !important;
+  color: #fff !important;
+  stroke: currentColor !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+}
+.inbox-stack .inbox-count {
+  position: absolute !important;
+  top: -4px !important;
+  right: -4px !important;
+  min-width: 15px !important;
+  height: 15px !important;
+  padding: 0 3px !important;
+  border-radius: 999px !important;
+  display: grid !important;
+  place-items: center !important;
+  background: #ef4444 !important;
+  color: #fff !important;
+  border: 2px solid #0d0c16 !important;
+  font-size: 9px !important;
+  line-height: 1 !important;
+  font-weight: 900 !important;
+  text-shadow: none !important;
+  z-index: 1003 !important;
+}
+.inbox-notification-bubble {
+  position: relative !important;
+  z-index: 1002 !important;
+  pointer-events: auto !important;
+}
+
+/* Ações da guilda: sempre alinhadas e previsíveis */
+.header-card .header-actions {
+  display: grid !important;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  gap: 10px !important;
+  width: 100% !important;
+}
+.header-card .header-actions .btn {
+  width: 100% !important;
+  min-width: 0 !important;
+  min-height: 46px !important;
+  margin: 0 !important;
+  justify-content: center !important;
+}
+.header-card .header-actions .btn[data-action="open-create-line"] { grid-column: span 1; }
+.header-card .header-actions .btn[data-action="open-edit-guild"] { grid-column: span 1; }
+.header-card .header-actions .btn[data-action="open-sub-help"] { grid-column: span 1; }
+.header-card .header-actions .btn[data-action="open-subleaders"] { grid-column: span 1; }
+.header-card .header-actions .btn[data-action="delete-selected-guild"] { grid-column: 1 / -1; }
+
+.line-card .actions:last-child {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) 46px 46px !important;
+  gap: 8px !important;
+  align-items: stretch !important;
+}
+.line-card .actions:last-child .btn-primary { grid-column: auto !important; }
+.line-card .actions:last-child .btn { width: 100% !important; min-width: 0 !important; }
+
+/* Inscrição já enviada */
+.public-guild-card.application-sent {
+  border-color: rgba(255,255,255,.07);
+  background: rgba(13,13,21,.7);
+}
+.application-sent-button {
+  width: 100% !important;
+  color: #858595 !important;
+  border-color: rgba(255,255,255,.08) !important;
+  background: rgba(255,255,255,.035) !important;
+  opacity: .78;
+  cursor: not-allowed !important;
+}
+.application-sent-button svg { color: #7d7d8c !important; }
+
+@media (max-width: 700px) {
+  .guild-topbar {
+    display: flex !important;
+    align-items: flex-start !important;
+    justify-content: space-between !important;
+    width: 100% !important;
+    min-height: 52px !important;
+  }
+  .guild-topbar > .btn-ghost {
+    flex: 1 1 auto !important;
+    width: auto !important;
+    max-width: calc(100% - 64px) !important;
+  }
+  .inbox-stack { flex: 0 0 50px !important; }
+  .inbox-stack .inbox-button { width: 50px !important; min-width: 50px !important; height: 50px !important; }
+  .header-card .header-actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 8px !important;
+  }
+  .header-card .header-actions .btn {
+    min-height: 46px !important;
+    padding: 9px 8px !important;
+    font-size: 12px !important;
+  }
+  .header-card .header-actions .btn[data-action="delete-selected-guild"] { grid-column: 1 / -1 !important; }
+  .line-card .actions:last-child {
+    grid-template-columns: minmax(0, 1fr) 44px 44px !important;
+  }
+}
+
+@media (max-width: 430px) {
+  .header-card .header-actions .btn { font-size: 11px !important; gap: 5px !important; }
+  .header-card .header-actions .btn svg { width: 16px !important; height: 16px !important; }
+  .line-card .actions:last-child { grid-template-columns: 1fr 42px 42px !important; }
+}

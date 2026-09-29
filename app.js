@@ -1976,12 +1976,25 @@ function renderGuildApplicationPanel() {
     <div class="card-header"><div><h2>Encontre uma Guilda</h2><p>Escolha uma guilda e envie seu pedido para participar.</p></div><span class="badge green">${icon("users",14)} ${guilds.length} encontradas</span></div>
     <input id="guildApplicationSearch" placeholder="Pesquisar por nome ou código..." value="${escapeHtml(state.publicGuildSearch)}" />
     <div class="public-guild-list">
-      ${guilds.length ? guilds.map(g => `<article class="public-guild-card"><div class="card-title-row">${renderAvatar(g,"md","shield","Logo da guilda")}<div><h3>${escapeHtml(g.name)} ${renderVerifiedBadge(g.verified)}</h3><small>Código: ${escapeHtml(g.code)}</small></div></div><p>${escapeHtml(g.description || "Sem descrição.")}</p><button class="btn btn-primary" data-action="open-application-form" data-id="${g.id}">${icon("send")} Pedir para participar</button></article>`).join("") : `<div class="empty">Nenhuma guilda encontrada.</div>`}
+      ${guilds.length ? guilds.map(g => {
+        const sent = hasLocalPendingApplication(g.id);
+        return `<article class="public-guild-card ${sent ? "application-sent" : ""}">
+          <div class="card-title-row">${renderAvatar(g,"md","shield","Logo da guilda")}<div><h3>${escapeHtml(g.name)} ${renderVerifiedBadge(g.verified)}</h3><small>Código: ${escapeHtml(g.code)}</small></div></div>
+          <p>${escapeHtml(g.description || "Sem descrição.")}</p>
+          ${sent
+            ? `<button class="btn btn-secondary application-sent-button" type="button" disabled aria-disabled="true">${icon("check-circle-2")} Inscrição enviada</button>`
+            : `<button class="btn btn-primary" data-action="open-application-form" data-id="${g.id}">${icon("send")} Pedir para participar</button>`}
+        </article>`;
+      }).join("") : `<div class="empty">Nenhuma guilda encontrada.</div>`}
     </div>
   </div>`;
 }
 
 function openApplicationForm(guildId) {
+  if (hasLocalPendingApplication(guildId)) {
+    toast("Você já enviou uma inscrição para esta guilda.");
+    return;
+  }
   const guild = state.publicGuilds.find(g => g.id === guildId);
   if (!guild) return;
   showModal(`Inscrição — ${escapeHtml(guild.name)}`, `<form id="modalForm" class="form">
@@ -1990,7 +2003,7 @@ function openApplicationForm(guildId) {
     <label>Idade<input id="applicationAge" type="number" min="10" max="100" placeholder="Ex: 18" required /></label>
     <label>WhatsApp<input id="applicationContact" inputmode="tel" placeholder="(00) 90000-0000" required /></label>
     <div class="form-actions"><button class="btn btn-secondary" type="button" data-action="close-modal">Cancelar</button><button class="btn btn-primary" type="submit">${icon("send")} Enviar inscrição</button></div>
-  </form>`, async () => { const ok = await submitGuildApplication(guildId,{name:document.querySelector("#applicationName").value,age:document.querySelector("#applicationAge").value,contact:document.querySelector("#applicationContact").value}); if(ok) closeModal(); });
+  </form>`, async () => { const ok = await submitGuildApplication(guildId,{name:document.querySelector("#applicationName").value,age:document.querySelector("#applicationAge").value,contact:document.querySelector("#applicationContact").value}); if(ok) { closeModal(); render(); } });
 }
 
 function renderLoginPanel() {
@@ -2317,6 +2330,20 @@ async function loadPublicGuilds() {
   state.publicGuilds = snap.docs.map(d => ({ id: d.id, ...d.data() }));
 }
 
+function getApplicationLocalKey(guildId) {
+  return `guild_manager_application_pending_${guildId}`;
+}
+
+function hasLocalPendingApplication(guildId) {
+  if (!guildId) return false;
+  return localStorage.getItem(getApplicationLocalKey(guildId)) === "1";
+}
+
+function markLocalApplicationPending(guildId) {
+  if (!guildId) return;
+  localStorage.setItem(getApplicationLocalKey(guildId), "1");
+}
+
 async function submitGuildApplication(guildId, data) {
   const name = String(data.name || "").trim();
   const age = Number(data.age);
@@ -2325,13 +2352,18 @@ async function submitGuildApplication(guildId, data) {
     toast("Preencha nome, idade e WhatsApp corretamente.");
     return false;
   }
+  if (hasLocalPendingApplication(guildId)) {
+    toast("Você já enviou uma inscrição para esta guilda.");
+    return false;
+  }
   const guild = state.publicGuilds.find(g => g.id === guildId);
   if (!guild) { toast("Guilda não encontrada."); return false; }
   await addDoc(collection(db, "guilds", guildId, "applications"), {
     name, age, contact, status: "pending", guildId, guildName: guild.name || "Guilda",
     createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
   });
-  toast("Inscrição enviada com sucesso!");
+  markLocalApplicationPending(guildId);
+  toast("Inscrição enviada com sucesso! Aguarde a resposta do líder.");
   return true;
 }
 
@@ -2637,7 +2669,9 @@ function renderGuild() {
         </button>
         ${owner ? `<div class="inbox-stack">
           <button class="inbox-button" type="button" data-action="open-applications" title="Abrir correio da guilda" aria-label="Abrir correio da guilda">
-            <span class="inbox-icon-wrap">${icon("mail", 22)}</span>
+            <span class="inbox-icon-wrap" aria-hidden="true">
+              <svg viewBox="0 0 24 24" role="img"><path d="M3.5 5.5h17v13h-17z" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"/><path d="m4.2 6.4 7.8 6 7.8-6" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </span>
             ${state.pendingApplicationsCount > 0 ? `<span class="inbox-count">${state.pendingApplicationsCount > 99 ? "99+" : state.pendingApplicationsCount}</span>` : ""}
           </button>
           <button class="inbox-notification-bubble" type="button" data-action="open-inbox-notices" hidden></button>
@@ -2679,7 +2713,7 @@ function renderGuild() {
           owner
             ? `<button class="btn btn-secondary" data-action="open-sub-help" title="Como funciona sublíder">
                 ${icon("circle-alert")}
-                !
+                Ajuda
               </button>
 
               <button class="btn btn-secondary" data-action="open-subleaders">
