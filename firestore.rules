@@ -48,6 +48,14 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+
+    // Avisos publicados pela administração do site via Firebase Console.
+    // O site pode apenas ler; criação/edição fica bloqueada para usuários do app.
+    match /siteNotices/{noticeId} {
+      allow read: if signedIn();
+      allow create, update, delete: if false;
+    }
+
     match /guilds/{guildId} {
       allow read: if true;
 

@@ -1573,3 +1573,392 @@ td strong {
   resize: vertical;
   line-height: 1.5;
 }
+
+/* Correio da guilda: navegação por Eventos, Logs e Avisos */
+.guild-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 48px;
+}
+
+.guild-topbar .btn-ghost {
+  margin: 0;
+}
+
+.guild-topbar .inbox-button {
+  position: relative;
+  inset: auto;
+  flex: 0 0 48px;
+  z-index: 5;
+}
+
+.guild-inbox {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.inbox-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  padding: 5px;
+  border: 1px solid var(--border);
+  border-radius: 17px;
+  background: rgba(255,255,255,.025);
+}
+
+.inbox-tab {
+  position: relative;
+  min-height: 44px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-weight: 900;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  cursor: pointer;
+}
+
+.inbox-tab:hover { background: rgba(255,255,255,.045); color: #fff; }
+.inbox-tab.active { background: rgba(155,92,255,.18); color: #fff; box-shadow: inset 0 0 0 1px rgba(155,92,255,.24); }
+
+.inbox-tab-count {
+  color: #ef4444;
+  font-size: 10px;
+  line-height: 1;
+  align-self: flex-start;
+  margin-top: 7px;
+  margin-left: -4px;
+}
+
+.inbox-content { min-height: 180px; }
+.inbox-empty-state {
+  min-height: 220px;
+  border: 1px dashed var(--border);
+  border-radius: 18px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  text-align: center;
+  padding: 30px 18px;
+  color: var(--muted);
+}
+.inbox-empty-state svg { color: var(--purple); }
+.inbox-empty-state strong { color: #fff; font-size: 16px; }
+.inbox-empty-state span { max-width: 420px; line-height: 1.5; font-size: 13px; }
+
+.inbox-notice-panel {
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  padding: 16px;
+  background: rgba(255,255,255,.02);
+}
+.inbox-notice-preview { display: flex; align-items: flex-start; gap: 13px; }
+.inbox-notice-preview h3 { margin: 10px 0 5px; }
+.inbox-notice-preview p { margin: 0; color: var(--muted); line-height: 1.6; white-space: pre-wrap; }
+.inbox-notice-panel .form-actions { margin-top: 16px; }
+
+/* Organiza os controles da guilda sem deixar botões espremidos */
+.guild-header-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+@media (max-width: 700px) {
+  .guild-topbar { min-height: 46px; }
+  .guild-topbar .inbox-button {
+    position: relative !important;
+    top: auto !important;
+    right: auto !important;
+    width: 46px !important;
+    height: 46px !important;
+    min-width: 46px;
+    padding: 0;
+    display: grid;
+    place-items: center;
+    pointer-events: auto;
+    z-index: 20;
+  }
+
+  .header-card .header-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    width: 100%;
+    margin-top: 16px;
+  }
+  .header-card .header-actions .btn {
+    width: 100%;
+    min-width: 0;
+    min-height: 46px;
+    padding: 10px 8px;
+  }
+  .header-card .header-actions .btn-primary:first-child { grid-column: 1 / -1; }
+  .header-card .header-actions .btn-danger:last-child { grid-column: 1 / -1; }
+
+  .inbox-tabs { gap: 5px; }
+  .inbox-tab { min-height: 42px; font-size: 12px; padding: 5px 4px; }
+  .inbox-tab svg { width: 15px; height: 15px; }
+
+  .guild-inbox .application-card { padding: 14px; }
+  .guild-inbox .application-card .actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+  .guild-inbox .application-card .btn-whatsapp { grid-column: 1 / -1; }
+  .guild-inbox .application-card .actions .btn { width: 100%; min-width: 0; }
+}
+
+/* ===== Correio: correção definitiva para celular ===== */
+.guild-topbar {
+  position: relative;
+  z-index: 30;
+}
+
+.guild-topbar .inbox-button,
+.header-card .guild-topbar .inbox-button {
+  position: relative !important;
+  inset: auto !important;
+  flex: 0 0 48px !important;
+  width: 48px !important;
+  min-width: 48px !important;
+  height: 48px !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  display: grid !important;
+  place-items: center !important;
+  pointer-events: auto !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  overflow: visible !important;
+  cursor: pointer !important;
+  z-index: 100 !important;
+}
+
+.inbox-icon-wrap {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+}
+
+.inbox-icon-wrap svg {
+  display: block !important;
+  width: 22px !important;
+  height: 22px !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+}
+
+.inbox-count {
+  z-index: 3;
+  pointer-events: none;
+}
+
+/* Botões da tela da guilda: ordem e dimensões previsíveis */
+.header-card .header-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  align-items: stretch;
+}
+
+.header-card .header-actions .btn {
+  width: 100%;
+  min-width: 0;
+  min-height: 46px;
+  justify-content: center;
+}
+
+@media (max-width: 700px) {
+  .header-card .header-actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 8px !important;
+  }
+
+  .header-card .header-actions .btn {
+    min-height: 46px;
+    padding: 10px 8px;
+    font-size: 13px;
+  }
+
+  .header-card .header-actions .btn-primary:first-child {
+    grid-column: 1 / -1;
+  }
+
+  .header-card .header-actions .btn-danger:last-child {
+    grid-column: 1 / -1;
+  }
+
+  .guild-topbar .inbox-button {
+    flex-basis: 46px !important;
+    width: 46px !important;
+    min-width: 46px !important;
+    height: 46px !important;
+  }
+}
+
+/* Logs de solicitações respondidas: deliberadamente mais escuros */
+.application-log-list {
+  display: grid;
+  gap: 9px;
+}
+
+.application-log-card {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  padding: 13px;
+  border: 1px solid rgba(255,255,255,.055);
+  border-radius: 15px;
+  background: rgba(7,7,13,.72);
+  opacity: .82;
+}
+
+.application-log-icon {
+  width: 36px;
+  height: 36px;
+  flex: 0 0 36px;
+  border-radius: 11px;
+  display: grid;
+  place-items: center;
+  color: #8b8b9b;
+  background: rgba(255,255,255,.035);
+}
+
+.application-log-icon.accepted { color: #62c985; background: rgba(34,197,94,.07); }
+.application-log-icon.rejected { color: #d36a73; background: rgba(239,68,68,.065); }
+
+.application-log-content { min-width: 0; flex: 1; }
+.application-log-head { display:flex; align-items:center; justify-content:space-between; gap:10px; }
+.application-log-head strong { color:#c6c6d1; }
+.application-log-content p { margin:4px 0; color:#777788; line-height:1.45; font-size:13px; }
+.application-log-content small { color:#5f5f6e; font-size:11px; }
+
+.application-status {
+  flex: 0 0 auto;
+  font-size: 10px;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: .5px;
+  padding: 4px 7px;
+  border-radius: 999px;
+  opacity: .85;
+}
+.application-status.accepted { color:#68bd83; background:rgba(34,197,94,.07); }
+.application-status.rejected { color:#c66a72; background:rgba(239,68,68,.065); }
+
+/* Avisos publicados pelo administrador do site */
+.site-notices-list { display:grid; gap:10px; }
+.site-notice-card {
+  display:flex;
+  gap:12px;
+  padding:15px;
+  border:1px solid var(--border);
+  border-radius:17px;
+  background:linear-gradient(145deg, rgba(155,92,255,.07), rgba(12,12,20,.88));
+}
+.site-notice-icon {
+  width:40px;
+  height:40px;
+  flex:0 0 40px;
+  display:grid;
+  place-items:center;
+  border-radius:12px;
+  color:#b783ff;
+  background:rgba(155,92,255,.1);
+}
+.site-notice-content { min-width:0; flex:1; }
+.site-notice-head { display:flex; justify-content:space-between; align-items:flex-start; gap:10px; }
+.site-notice-head strong { color:#fff; }
+.site-notice-head small { color:var(--muted2); white-space:nowrap; }
+.site-notice-content p { color:var(--muted); margin:7px 0 9px; line-height:1.55; white-space:pre-wrap; }
+.site-notice-source { color:var(--muted2); font-size:11px; display:flex; align-items:center; gap:5px; }
+
+@media (max-width: 520px) {
+  .inbox-tabs { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .inbox-tab { gap:4px; font-size:11px; }
+  .inbox-tab span { white-space:nowrap; }
+  .application-log-card { align-items:flex-start; }
+  .application-log-head { flex-direction:column; align-items:flex-start; gap:5px; }
+  .site-notice-head { flex-direction:column; gap:4px; }
+}
+
+/* ===== Correio: botão + aviso não lido, especialmente no celular ===== */
+.inbox-stack {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  z-index: 200;
+}
+.inbox-stack .inbox-button {
+  position: relative !important;
+  inset: auto !important;
+  flex: 0 0 auto !important;
+  width: 48px !important;
+  min-width: 48px !important;
+  height: 48px !important;
+  min-height: 48px !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  display: grid !important;
+  place-items: center !important;
+  pointer-events: auto !important;
+  cursor: pointer !important;
+  z-index: 201 !important;
+}
+.inbox-stack .inbox-icon-wrap {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+}
+.inbox-stack .inbox-icon-wrap svg {
+  width: 22px !important;
+  height: 22px !important;
+  display: block !important;
+}
+.inbox-notification-bubble {
+  max-width: 150px;
+  min-height: 27px;
+  border: 1px solid rgba(155,92,255,.3);
+  border-radius: 10px 10px 10px 4px;
+  padding: 5px 9px;
+  background: rgba(28,22,44,.96);
+  color: #caa8ff;
+  font: 800 11px/1.1 inherit;
+  box-shadow: 0 8px 20px rgba(0,0,0,.28), 0 0 14px rgba(155,92,255,.12);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.inbox-notification-bubble:not([hidden]) { display: block; }
+.inbox-notification-bubble:hover { background: rgba(39,29,61,.98); color:#fff; }
+
+@media (max-width: 700px) {
+  .guild-topbar {
+    display: flex !important;
+    align-items: flex-start !important;
+    justify-content: space-between !important;
+    gap: 12px !important;
+  }
+  .guild-topbar > .btn-ghost { flex: 1 1 auto; min-width: 0; }
+  .inbox-stack { flex: 0 0 auto; align-items: flex-end; }
+  .inbox-stack .inbox-button { width: 46px !important; min-width:46px !important; height:46px !important; min-height:46px !important; }
+  .inbox-notification-bubble { font-size:10px; max-width:130px; }
+  .header-card .header-actions { grid-template-columns: 1fr 1fr !important; }
+}

@@ -73,8 +73,11 @@ const state = {
   guildApplications: [],
   applicationsLoading: false,
   pendingApplicationsCount: 0,
+  inboxTab: "events",
   ranking: [],
   actionLogs: [],
+  siteNotices: [],
+  unreadSiteNoticesCount: 0,
   playerSearch: "",
   modalSubmit: null,
   modalSubmitBusy: false,
@@ -421,17 +424,14 @@ function startGuildRealtime(guildId, publicMode = false) {
             const currentBadge = inbox.querySelector(".inbox-count");
             if (snapshot.size > 0) {
               const label = snapshot.size > 99 ? "99+" : String(snapshot.size);
-              if (currentBadge) {
-                currentBadge.textContent = label;
-              } else {
+              if (currentBadge) currentBadge.textContent = label;
+              else {
                 const badge = document.createElement("span");
                 badge.className = "inbox-count";
                 badge.textContent = label;
                 inbox.appendChild(badge);
               }
-            } else if (currentBadge) {
-              currentBadge.remove();
-            }
+            } else if (currentBadge) currentBadge.remove();
           }
         },
         (error) => console.warn("Listener de inscrições falhou:", error)
@@ -468,6 +468,8 @@ async function createActionLog(guildId, data = {}) {
       actorUid: state.user.uid,
       actorEmail: state.user.email,
       actorRole: getActorRoleForLog(guildId),
+      status: data.status || "",
+      applicantName: data.applicantName || "",
       createdAt: serverTimestamp(),
     });
   } catch (error) {
@@ -2362,39 +2364,249 @@ function whatsappApplicationLink(application) {
 
 async function updateApplicationStatus(applicationId, status) {
   if (!isOwner() || !state.selectedGuild) return;
-  await updateDoc(doc(db, "guilds", state.selectedGuild.id, "applications", applicationId), {
-    status, updatedAt: serverTimestamp(), reviewedAt: serverTimestamp(), reviewedBy: state.user.uid,
-  });
+
   const item = state.guildApplications.find(a => a.id === applicationId);
-  if (item) item.status = status;
-  state.pendingApplicationsCount = Math.max(0, state.pendingApplicationsCount - (status === "pending" ? 0 : 1));
-  modalBody.innerHTML = renderApplicationsModal();
-  refreshIcons();
-  toast(status === "accepted" ? "Membro aceito." : "Inscrição rejeitada.");
+  if (!item || item.status !== "pending") return;
+
+  await updateDoc(doc(db, "guilds", state.selectedGuild.id, "applications", applicationId), {
+    status,
+    updatedAt: serverTimestamp(),
+    reviewedAt: serverTimestamp(),
+    reviewedBy: state.user.uid,
+  });
+
+  await createActionLog(state.selectedGuild.id, {
+    action: status === "accepted" ? "application_accepted" : "application_rejected",
+    title: status === "accepted" ? "Inscrição aceita" : "Inscrição rejeitada",
+    description: `${status === "accepted" ? "Aceitou" : "Rejeitou"} a inscrição de ${item.name}.`,
+    targetType: "application",
+    targetId: applicationId,
+    targetName: item.name,
+    status,
+    applicantName: item.name,
+  });
+
+  item.status = status;
+  item.reviewedAt = new Date();
+  state.pendingApplicationsCount = Math.max(0, state.pendingApplicationsCount - 1);
+  state.inboxTab = "events";
+  await loadActionLogs(state.selectedGuild.id);
+  await renderInboxModal();
+  toast(status === "accepted" ? "Membro aceito e ação registrada nos logs." : "Inscrição rejeitada e ação registrada nos logs.");
 }
 
 async function openApplicationsModal() {
   if (!isOwner()) return;
+  state.inboxTab = "events";
   await loadGuildApplications(state.selectedGuild.id);
-  showModal("Correio de inscrições", renderApplicationsModal());
+  await renderInboxModal(true);
 }
 
-function renderApplicationsModal() {
-  if (state.applicationsLoading) return `<div class="empty">Carregando inscrições...</div>`;
-  const list = state.guildApplications || [];
-  if (!list.length) return `<div class="empty">Nenhuma inscrição recebida ainda.</div><div class="form-actions"><button class="btn btn-secondary" type="button" data-action="close-modal">Fechar</button></div>`;
-  return `<div class="applications-list">${list.map(a => {
-    const statusLabel = a.status === "accepted" ? "Aceito" : a.status === "rejected" ? "Rejeitado" : "Pendente";
-    const statusClass = a.status === "accepted" ? "green" : a.status === "rejected" ? "red" : "yellow";
-    return `<article class="application-card">
-      <div class="application-top"><div><span class="badge ${statusClass}">${icon(a.status === "pending" ? "mail" : a.status === "accepted" ? "check" : "x", 14)} ${statusLabel}</span><h3>${escapeHtml(a.name)}</h3></div><small>${formatApplicationDate(a.createdAt)}</small></div>
-      <div class="application-grid"><div><span>Idade</span><strong>${escapeHtml(a.age)}</strong></div><div><span>Contato</span><strong>${escapeHtml(a.contact)}</strong></div></div>
+async function renderInboxModal(firstOpen = false) {
+  if (!state.selectedGuild || !isOwner()) return;
+
+  if (firstOpen) {
+    showModal("Correio da guilda", `<div class="inbox-loading"><div class="empty">Carregando correio...</div></div>`);
+  }
+
+  if (state.inboxTab === "events") {
+    await loadGuildApplications(state.selectedGuild.id);
+  }
+
+  if (state.inboxTab === "logs") {
+    await loadActionLogs(state.selectedGuild.id);
+  }
+
+  if (state.inboxTab === "notices") {
+    await loadSiteNotices();
+    markSiteNoticesAsRead();
+  }
+
+  modalTitle.textContent = "Correio da guilda";
+  modalBody.innerHTML = renderInboxModalBody();
+  refreshIcons();
+}
+
+function renderInboxTabs() {
+  const tabs = [
+    ["events", "mail", "Eventos"],
+    ["logs", "history", "Logs"],
+    ["notices", "megaphone", "Avisos"],
+  ];
+
+  return `<div class="inbox-tabs" role="tablist">${tabs.map(([key, iconName, label]) => `
+    <button class="inbox-tab ${state.inboxTab === key ? "active" : ""}" type="button" data-action="inbox-tab" data-tab="${key}">
+      ${icon(iconName, 16)} <span>${label}</span>
+      ${key === "events" && state.pendingApplicationsCount > 0 ? `<b class="inbox-tab-count">${state.pendingApplicationsCount > 99 ? "99+" : state.pendingApplicationsCount}</b>` : ""}
+    </button>
+  `).join("")}</div>`;
+}
+
+function renderInboxEvents() {
+  const pending = (state.guildApplications || []).filter(a => a.status === "pending");
+  if (state.applicationsLoading) return `<div class="empty">Carregando solicitações...</div>`;
+  if (!pending.length) {
+    return `<div class="inbox-empty-state">${icon("mail-check", 34)}<strong>Nenhuma solicitação pendente</strong><span>Novos pedidos para entrar na guilda aparecerão aqui.</span></div>`;
+  }
+
+  return `<div class="applications-list">${pending.map(a => `
+    <article class="application-card">
+      <div class="application-top">
+        <div>
+          <span class="badge yellow">${icon("mail", 14)} Nova solicitação</span>
+          <h3>${escapeHtml(a.name)}</h3>
+        </div>
+        <small>${formatApplicationDate(a.createdAt)}</small>
+      </div>
+      <div class="application-grid">
+        <div><span>Idade</span><strong>${escapeHtml(a.age)}</strong></div>
+        <div><span>Contato</span><strong>${escapeHtml(a.contact)}</strong></div>
+      </div>
       <div class="actions">
         <a class="btn btn-whatsapp" href="${whatsappApplicationLink(a)}" target="_blank" rel="noopener">${icon("message-circle")} WhatsApp</a>
-        ${a.status === "pending" ? `<button class="btn btn-primary" data-action="accept-application" data-id="${a.id}">${icon("check")} Aceitar</button><button class="btn btn-danger" data-action="reject-application" data-id="${a.id}">${icon("x")} Rejeitar</button>` : ""}
+        <button class="btn btn-primary" data-action="accept-application" data-id="${a.id}">${icon("check")} Aceitar</button>
+        <button class="btn btn-danger" data-action="reject-application" data-id="${a.id}">${icon("x")} Rejeitar</button>
+      </div>
+    </article>
+  `).join("")}</div>`;
+}
+
+function renderInboxLogs() {
+  const logs = state.actionLogs || [];
+  const applicationLogs = logs.filter(log => String(log.action || "").startsWith("application_"));
+  if (!applicationLogs.length) {
+    return `<div class="inbox-empty-state">${icon("history", 34)}<strong>Nenhum registro de inscrição</strong><span>Quando uma solicitação for aceita ou rejeitada, ela ficará registrada aqui.</span></div>`;
+  }
+
+  return `<div class="application-log-list">${applicationLogs.map(log => {
+    const accepted = log.status === "accepted" || log.action === "application_accepted";
+    const rejected = log.status === "rejected" || log.action === "application_rejected";
+    const statusLabel = accepted ? "Aceito" : rejected ? "Rejeitado" : "Respondido";
+    const statusClass = accepted ? "accepted" : "rejected";
+    return `<article class="application-log-card">
+      <div class="application-log-icon ${statusClass}">${icon(accepted ? "check" : "x", 18)}</div>
+      <div class="application-log-content">
+        <div class="application-log-head">
+          <strong>${escapeHtml(log.applicantName || log.targetName || "Candidato")}</strong>
+          <span class="application-status ${statusClass}">${statusLabel}</span>
+        </div>
+        <p>${escapeHtml(log.description || (accepted ? "Inscrição aceita." : "Inscrição rejeitada."))}</p>
+        <small>${escapeHtml(log.actorEmail || "Usuário")} • ${formatLogDate(log)}</small>
       </div>
     </article>`;
-  }).join("")}</div><div class="form-actions"><button class="btn btn-secondary" type="button" data-action="close-modal">Fechar</button></div>`;
+  }).join("")}</div>`;
+}
+
+async function loadSiteNotices() {
+  try {
+    const snap = await getDocs(collection(db, "siteNotices"));
+    state.siteNotices = snap.docs
+      .map(d => ({ id: d.id, ...d.data() }))
+      .filter(item => item.active !== false)
+      .sort((a, b) => {
+        const ad = a.createdAt?.toDate?.()?.getTime?.() || 0;
+        const bd = b.createdAt?.toDate?.()?.getTime?.() || 0;
+        return bd - ad;
+      });
+    state.unreadSiteNoticesCount = state.siteNotices.filter(notice =>
+      notice?.id && localStorage.getItem(getSiteNoticeReadKey(notice.id)) !== "1"
+    ).length;
+    updateInboxNotificationBubble();
+  } catch (error) {
+    console.warn("Não foi possível carregar avisos do site:", error);
+    state.siteNotices = [];
+  }
+}
+
+function formatNoticeDate(value) {
+  try {
+    const date = value?.toDate ? value.toDate() : new Date(value);
+    if (Number.isNaN(date.getTime())) return "";
+    return date.toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+  } catch { return ""; }
+}
+
+function getSiteNoticeReadKey(noticeId) {
+  return `guild_manager_notice_read_${state.user?.uid || "guest"}_${noticeId}`;
+}
+
+function updateInboxNotificationBubble() {
+  const bubble = document.querySelector(".inbox-notification-bubble");
+  if (!bubble) return;
+  const count = Number(state.unreadSiteNoticesCount || 0);
+  if (count > 0) {
+    bubble.textContent = count === 1 ? "Novo aviso" : `${count} novos avisos`;
+    bubble.hidden = false;
+  } else {
+    bubble.hidden = true;
+  }
+}
+
+function markSiteNoticesAsRead() {
+  (state.siteNotices || []).forEach(notice => {
+    if (notice?.id) localStorage.setItem(getSiteNoticeReadKey(notice.id), "1");
+  });
+  state.unreadSiteNoticesCount = 0;
+  updateInboxNotificationBubble();
+}
+
+function renderInboxNotices() {
+  const notices = state.siteNotices || [];
+  if (!notices.length) {
+    return `<div class="inbox-empty-state">${icon("megaphone-off", 34)}<strong>Nenhum aviso do Guild Manager</strong><span>Quando a administração publicar um aviso pelo Firebase, ele aparecerá aqui.</span></div>`;
+  }
+
+  return `<div class="site-notices-list">${notices.map(notice => `
+    <article class="site-notice-card">
+      <div class="site-notice-icon">${icon(notice.type === "warning" ? "triangle-alert" : notice.type === "success" ? "badge-check" : "megaphone", 20)}</div>
+      <div class="site-notice-content">
+        <div class="site-notice-head">
+          <strong>${escapeHtml(notice.title || "Aviso do Guild Manager")}</strong>
+          <small>${formatNoticeDate(notice.createdAt)}</small>
+        </div>
+        <p>${escapeHtml(notice.message || notice.description || "")}</p>
+        <span class="site-notice-source">${icon("shield-check", 13)} Administração do Guild Manager</span>
+      </div>
+    </article>
+  `).join("")}</div>`;
+}
+
+function renderInboxModalBody() {
+  let content = "";
+  if (state.inboxTab === "events") content = renderInboxEvents();
+  if (state.inboxTab === "logs") content = renderInboxLogs();
+  if (state.inboxTab === "notices") content = renderInboxNotices();
+
+  return `<div class="guild-inbox">
+    ${renderInboxTabs()}
+    <div class="inbox-content">${content}</div>
+    <div class="form-actions"><button class="btn btn-secondary" type="button" data-action="close-modal">Fechar</button></div>
+  </div>`;
+}
+
+function openEditGuildNoticeModal() {
+  if (!canEditGuild() || !state.selectedGuild) return;
+  const current = state.selectedGuild.alerta || "";
+  showModal("Aviso da guilda", `<form id="modalForm" class="form">
+    <div class="help-box"><strong>Publique um aviso</strong><p>Esse aviso aparece na página da guilda para os membros e visitantes.</p></div>
+    <label>Mensagem<textarea id="guildNotice" maxlength="500" placeholder="Ex: Reunião hoje às 20h...">${escapeHtml(current)}</textarea></label>
+    <div class="form-actions"><button class="btn btn-secondary" type="button" data-action="close-modal">Cancelar</button><button class="btn btn-primary" type="submit">${icon("save")} Salvar aviso</button></div>
+  </form>`, async () => {
+    const value = document.querySelector("#guildNotice")?.value?.trim() || "";
+    await updateDoc(doc(db, "guilds", state.selectedGuild.id), { alerta: value, updatedAt: serverTimestamp() });
+    await createActionLog(state.selectedGuild.id, {
+      action: "update_notice",
+      title: value ? "Aviso publicado" : "Aviso removido",
+      description: value ? "Atualizou o aviso da guilda." : "Removeu o aviso da guilda.",
+      targetType: "guild",
+      targetId: state.selectedGuild.id,
+      targetName: state.selectedGuild.name,
+    });
+    state.selectedGuild.alerta = value;
+    await refreshSelectedGuildSilently();
+    closeModal();
+    toast(value ? "Aviso publicado." : "Aviso removido.");
+  });
 }
 
 function renderGuild() {
@@ -2418,10 +2630,19 @@ function renderGuild() {
 
   return `
     <div class="header-card">
-      <button class="btn btn-ghost" data-action="${state.publicMode ? "home" : "admin"}">
-        ${icon("arrow-left")}
-        Voltar
-      </button>
+      <div class="guild-topbar">
+        <button class="btn btn-ghost" data-action="${state.publicMode ? "home" : "admin"}">
+          ${icon("arrow-left")}
+          Voltar
+        </button>
+        ${owner ? `<div class="inbox-stack">
+          <button class="inbox-button" type="button" data-action="open-applications" title="Abrir correio da guilda" aria-label="Abrir correio da guilda">
+            <span class="inbox-icon-wrap">${icon("mail", 22)}</span>
+            ${state.pendingApplicationsCount > 0 ? `<span class="inbox-count">${state.pendingApplicationsCount > 99 ? "99+" : state.pendingApplicationsCount}</span>` : ""}
+          </button>
+          <button class="inbox-notification-bubble" type="button" data-action="open-inbox-notices" hidden></button>
+        </div>` : ""}
+      </div>
 
       <div style="margin-top:18px">
         ${renderGuildCodeControl(guild.code)}
@@ -2455,15 +2676,6 @@ function renderGuild() {
         }
 
         ${
-          owner || sub
-            ? `<button class="btn btn-secondary" data-action="open-logs">
-                ${icon("history")}
-                Histórico
-              </button>`
-            : ""
-        }
-
-        ${
           owner
             ? `<button class="btn btn-secondary" data-action="open-sub-help" title="Como funciona sublíder">
                 ${icon("circle-alert")}
@@ -2473,11 +2685,6 @@ function renderGuild() {
               <button class="btn btn-secondary" data-action="open-subleaders">
                 ${icon("user-cog")}
                 Sublíderes
-              </button>
-
-              <button class="inbox-button" data-action="open-applications" title="Correio de inscrições" aria-label="Correio de inscrições">
-                ${icon("mail", 22)}
-                ${state.pendingApplicationsCount > 0 ? `<span class="inbox-count">${state.pendingApplicationsCount > 99 ? "99+" : state.pendingApplicationsCount}</span>` : ""}
               </button>
 
               <button class="btn btn-danger" data-action="delete-selected-guild">
@@ -3263,6 +3470,18 @@ document.addEventListener("click", async (event) => {
   if (action === "open-application-form") openApplicationForm(id);
 
   if (action === "open-applications") await openApplicationsModal();
+
+  if (action === "open-inbox-notices") {
+    state.inboxTab = "notices";
+    await renderInboxModal(true);
+  }
+
+  if (action === "inbox-tab") {
+    state.inboxTab = button.dataset.tab || "events";
+    await renderInboxModal();
+  }
+
+  if (action === "edit-guild-notice") openEditGuildNoticeModal();
 
   if (action === "accept-application") await updateApplicationStatus(id, "accepted");
 
