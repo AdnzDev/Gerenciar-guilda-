@@ -497,7 +497,7 @@ async function loadActionLogs(guildId = state.selectedGuild?.id) {
     return state.actionLogs;
   } catch (error) {
     console.error("Erro ao carregar histórico:", error);
-    toast("Erro ao carregar histórico. Confira as Rules do Firebase.");
+    toast("Erro ao carregar histórico. Confira as regras de acesso do sistema.");
     return [];
   }
 }
@@ -904,7 +904,7 @@ async function loadGuildTree(guildId, publicMode = false, options = {}) {
     syncPlayerRealtimeListeners();
   } catch (error) {
     console.error(error);
-    if (!silent) toast("Erro ao carregar guilda. Confira as Rules do Firebase.");
+    if (!silent) toast("Erro ao carregar guilda. Confira as regras de acesso do sistema.");
   } finally {
     const scrollY = window.scrollY;
     state.loading = false;
@@ -978,10 +978,10 @@ async function register(email, password) {
     await createUserWithEmailAndPassword(auth, email, password);
     toast("Conta criada com sucesso.");
   } catch (error) {
-    console.error("ERRO FIREBASE AUTH:", error.code, error.message);
+    console.error("ERRO DE AUTENTICAÇÃO:", error.code, error.message);
 
     if (error.code === "auth/operation-not-allowed") {
-      toast("Ative Email/Senha no Firebase Authentication.");
+      toast("Ative o login por email e senha nas configurações de autenticação.");
       return;
     }
 
@@ -1017,10 +1017,10 @@ async function login(email, password) {
     await signInWithEmailAndPassword(auth, email, password);
     toast("Login feito com sucesso.");
   } catch (error) {
-    console.error("ERRO LOGIN FIREBASE:", error.code, error.message);
+    console.error("ERRO DE LOGIN:", error.code, error.message);
 
     if (error.code === "auth/operation-not-allowed") {
-      toast("Ative Email/Senha no Firebase Authentication.");
+      toast("Ative o login por email e senha nas configurações de autenticação.");
       return;
     }
 
@@ -2376,7 +2376,7 @@ async function loadGuildApplications(guildId) {
     state.guildApplications = snap.docs.map(d => ({ id: d.id, ...d.data() }));
   } catch (error) {
     console.error("Erro ao carregar inscrições:", error);
-    toast("Não foi possível carregar as inscrições. Confira as Rules do Firebase.");
+    toast("Não foi possível carregar as inscrições. Confira as regras de acesso do sistema.");
     state.guildApplications = [];
   } finally { state.applicationsLoading = false; }
 }
@@ -2585,7 +2585,7 @@ function markSiteNoticesAsRead() {
 function renderInboxNotices() {
   const notices = state.siteNotices || [];
   if (!notices.length) {
-    return `<div class="inbox-empty-state">${icon("megaphone-off", 34)}<strong>Nenhum aviso do Guild Manager</strong><span>Quando a administração publicar um aviso pelo Firebase, ele aparecerá aqui.</span></div>`;
+    return `<div class="inbox-empty-state">${icon("megaphone-off", 34)}<strong>Nenhum aviso do Guild Manager</strong><span>Novos avisos oficiais aparecerão aqui.</span></div>`;
   }
 
   return `<div class="site-notices-list">${notices.map(notice => `
@@ -3373,12 +3373,12 @@ function openPlayerModal(player = null) {
         <div class="grid-2">
           <label>
             Nome
-            <input id="playerName" value="${escapeHtml(player?.name || "")}" placeholder="Ex: Tito Galeria" />
+            <input id="playerName" value="${escapeHtml(player?.name || "")}" placeholder="Ex: Bruno" />
           </label>
 
           <label>
             Nick
-            <input id="playerNick" value="${escapeHtml(player?.nick || "")}" placeholder="Ex: NX TITO" />
+            <input id="playerNick" value="${escapeHtml(player?.nick || "")}" placeholder="Ex: NX ᴮᴬᴴᴵᴬᴺᴼ" />
           </label>
         </div>
 
@@ -3682,7 +3682,7 @@ onAuthStateChanged(auth, async (user) => {
       await ensureUserProfile(user);
     } catch (error) {
       console.error("Erro ao salvar usuário:", error);
-      toast("Atualize as Rules do Firebase para usar sublíderes.");
+      toast("Atualize as regras de acesso para usar sublíderes.");
     }
 
     await loadOwnerGuilds();
